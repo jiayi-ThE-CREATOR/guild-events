@@ -52,7 +52,12 @@ export const mockStore = {
     return row;
   },
 
-  remove(id: string) {
-    write(read().filter((row) => row.id !== id));
+  /** 行は消さず status を cancelled にする（DB 側と同じ挙動） */
+  cancel(id: string) {
+    write(
+      read().map((row) =>
+        row.id === id ? { ...row, status: "cancelled" as const } : row,
+      ),
+    );
   },
 };

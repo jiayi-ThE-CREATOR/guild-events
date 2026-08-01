@@ -117,6 +117,15 @@ export default function EventDetailPage() {
               から
             </p>
           </>
+        ) : remaining !== null && remaining <= 0 ? (
+          <>
+            <div className="bg-canvas text-ink-soft w-full rounded-xl py-3.5 text-center text-[15px] font-bold md:w-auto md:px-12">
+              満席
+            </div>
+            <p className="text-ink-soft mt-2 text-center text-[11px] md:mt-0 md:text-left md:text-xs">
+              キャンセルが出ると再び申請できます
+            </p>
+          </>
         ) : (
           <>
             <Link

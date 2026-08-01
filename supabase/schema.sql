@@ -20,7 +20,10 @@ create table applications (
   event_id uuid references events(id) on delete cascade,
   name text not null,
   university text not null,
-  status text default 'applied',
+  -- applied＝申請中 / cancelled＝キャンセル済み / attended＝出席済
+  -- キャンセルは行を消さず status を変える（運営に履歴を残すため）
+  status text not null default 'applied'
+    check (status in ('applied', 'cancelled', 'attended')),
   -- ↓ 申請フォームの入力項目に合わせた任意カラム（資料の設計に 2 本だけ追加）
   discord text,
   note text,
@@ -32,7 +35,50 @@ create index applications_name_idx on applications (name);
 create index applications_event_id_idx on applications (event_id);
 
 -- ============================================================
--- ② セキュリティ設定 RLS（STEP 16）— 勉強会用に全開放
+-- ② 二重申請の禁止
+--    「名前＋大学」で本人を識別する設計なので、同じイベントに同じ名前は 1 件まで。
+--    キャンセル済みは除くので、キャンセル後の再申請はできる。
+-- ============================================================
+create unique index applications_one_per_person
+  on applications (event_id, name)
+  where status <> 'cancelled';
+
+-- ============================================================
+-- ③ 定員オーバーの禁止
+--    アプリ側でも弾いているが、同時申請では競り勝てないので DB 側で止める。
+--    events の行をロックしてから数えるため、同時に押されても定員を超えない。
+-- ============================================================
+create or replace function check_event_capacity()
+returns trigger
+language plpgsql
+as $$
+declare
+  cap int;
+  taken int;
+begin
+  select capacity into cap from events where id = new.event_id for update;
+  if cap is null then
+    return new;  -- 定員なしのイベント
+  end if;
+
+  select count(*) into taken
+    from applications
+   where event_id = new.event_id and status <> 'cancelled';
+
+  if taken >= cap then
+    raise exception '満席のため申請できません';
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger applications_capacity_guard
+  before insert on applications
+  for each row execute function check_event_capacity();
+
+-- ============================================================
+-- ④ セキュリティ設定 RLS（STEP 16）— 勉強会用に全開放
 --    本番サービスではこの設定は NG。ログインと組み合わせて絞るのが本来の姿。
 -- ============================================================
 alter table events enable row level security;
@@ -45,7 +91,7 @@ create policy "all_applications" on applications
   for all using (true) with check (true);
 
 -- ============================================================
--- ③ サンプルデータ（STEP 17）
+-- ⑤ サンプルデータ（STEP 17）
 --    lib/mockData.ts と同じ内容。班で自由に変えてよい。
 -- ============================================================
 insert into events (title, description, location, event_date, capacity) values
@@ -61,3 +107,27 @@ insert into events (title, description, location, event_date, capacity) values
   ('もくもく会 vol.5',
    '各自すきなものを開発する自由会。',
    '京都大学 吉田キャンパス', '2026-07-12 13:00+09', 20);
+
+
+-- ============================================================
+-- 運営向け：ここから下はセットアップ時には実行しない。必要になったら使う。
+-- ============================================================
+
+-- ▼ 出席をとる（イベント当日の後に実行）
+--   マイページの「参加済み」はこの status を見ている。
+--   Table Editor で 1 件ずつ変えてもよい。
+-- update applications set status = 'attended'
+--  where event_id = 'ここにイベントのID' and status = 'applied';
+
+-- ▼ イベントごとの申請者一覧（阪大・京大をまたいで確認する）
+-- select e.title, a.name, a.university, a.discord, a.status, a.note, a.created_at
+--   from applications a join events e on e.id = a.event_id
+--  where a.status <> 'cancelled'
+--  order by e.event_date, a.created_at;
+
+-- ▼ イベントごとの人数集計（大学別）
+-- select e.title, a.university, count(*)
+--   from applications a join events e on e.id = a.event_id
+--  where a.status <> 'cancelled'
+--  group by e.title, a.university
+--  order by e.title;

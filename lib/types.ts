@@ -12,8 +12,8 @@ export type EventRecord = {
   capacity: number | null;
 };
 
-/** 申請中 / 出席済 */
-export type ApplicationStatus = "applied" | "attended";
+/** 申請中 / キャンセル済み / 出席済。キャンセルは行を消さず status を変える */
+export type ApplicationStatus = "applied" | "cancelled" | "attended";
 
 /** applications テーブル 1 行 */
 export type ApplicationRecord = {
