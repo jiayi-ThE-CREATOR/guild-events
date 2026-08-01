@@ -1,65 +1,108 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import EventCard from "@/components/EventCard";
+import { isSupabaseConfigured, listUpcomingEvents } from "@/lib/data";
+import { campusOf } from "@/lib/format";
+import { useProfile } from "@/lib/profile";
+import type { EventWithCount } from "@/lib/types";
+
+const FILTERS = ["すべて", "阪大", "京大", "オンライン"] as const;
+type Filter = (typeof FILTERS)[number];
+
+export default function EventListPage() {
+  const [events, setEvents] = useState<EventWithCount[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<Filter>("すべて");
+  const profile = useProfile();
+
+  useEffect(() => {
+    listUpcomingEvents()
+      .then(setEvents)
+      .catch((e: Error) => setError(e.message));
+  }, []);
+
+  const visible = useMemo(() => {
+    if (!events) return [];
+    if (filter === "すべて") return events;
+    return events.filter((e) => campusOf(e.location) === filter);
+  }, [events, filter]);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <>
+      <header className="flex items-start justify-between px-4 pt-6 pb-4">
+        <div>
+          <h1 className="text-ink text-2xl font-bold">イベント</h1>
+          <p className="text-ink-soft mt-0.5 text-xs">
+            阪大 × 京大 AIコミュニティ
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+        <Link
+          href="/mypage"
+          aria-label="マイページ"
+          className="bg-navy-soft text-navy flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold"
+        >
+          {profile ? (
+            profile.name.trim().charAt(0)
+          ) : (
+            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="8.5" r="3.5" fill="currentColor" />
+              <path
+                d="M5 20c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5"
+                fill="currentColor"
+              />
+            </svg>
+          )}
+        </Link>
+      </header>
+
+      <div className="flex gap-2 overflow-x-auto px-4 pb-4">
+        {FILTERS.map((f) => (
+          <button
+            key={f}
+            type="button"
+            onClick={() => setFilter(f)}
+            aria-pressed={filter === f}
+            className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold transition-colors ${
+              filter === f
+                ? "bg-navy text-white"
+                : "border-line text-ink-soft border bg-white"
+            }`}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+            {f}
+          </button>
+        ))}
+      </div>
+
+      <div className="space-y-3 px-4">
+        {error && (
+          <p className="text-amber bg-amber-soft rounded-xl p-3 text-xs">
+            読み込みに失敗しました：{error}
+          </p>
+        )}
+
+        {!events && !error && (
+          <p className="text-ink-soft py-10 text-center text-xs">読み込み中…</p>
+        )}
+
+        {events && visible.length === 0 && (
+          <p className="text-ink-soft py-10 text-center text-xs">
+            該当するイベントはありません
+          </p>
+        )}
+
+        {visible.map((event) => (
+          <EventCard key={event.id} event={event} />
+        ))}
+      </div>
+
+      {!isSupabaseConfigured && (
+        <p className="text-ink-soft px-4 pt-6 text-center text-[11px]">
+          モックデータで表示中 — <code>.env.local</code> を設定すると Supabase
+          に切り替わります
+        </p>
+      )}
+    </>
   );
 }

@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# 雛形はコミットする（.env* の除外から除く）
+!.env.local.example
