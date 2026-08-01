@@ -7,7 +7,7 @@ export default function PageHeader({ title }: { title: string }) {
   const router = useRouter();
 
   return (
-    <header className="border-line sticky top-0 z-10 flex items-center gap-2 border-b bg-white/95 px-4 py-3 backdrop-blur">
+    <header className="border-line sticky top-0 z-10 flex items-center gap-2 border-b bg-white/95 px-4 py-3 backdrop-blur md:static md:border-0 md:bg-transparent md:px-0 md:pt-0 md:pb-4 md:backdrop-blur-none">
       <button
         type="button"
         onClick={() => router.back()}

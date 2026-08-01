@@ -18,14 +18,14 @@ export default function ApplyPage() {
   const isClient = useIsClient();
 
   return (
-    <>
+    <div className="md:mx-auto md:max-w-xl">
       <PageHeader title="参加申請" />
       {isClient ? (
         <ApplyForm eventId={id} />
       ) : (
         <p className="text-ink-soft py-16 text-center text-xs">読み込み中…</p>
       )}
-    </>
+    </div>
   );
 }
 
@@ -84,7 +84,10 @@ function ApplyForm({ eventId }: { eventId: string }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5 px-4 pt-4">
+    <form
+      onSubmit={handleSubmit}
+      className="border-line space-y-5 px-4 pt-4 md:rounded-2xl md:border md:bg-white md:p-8"
+    >
       {event && (
         <div className="border-line flex items-center gap-3 rounded-2xl border p-3">
           <div

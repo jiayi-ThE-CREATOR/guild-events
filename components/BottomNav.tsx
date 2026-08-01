@@ -12,7 +12,7 @@ export default function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="border-line fixed inset-x-0 bottom-0 z-20 mx-auto w-full max-w-[430px] border-t bg-white/95 backdrop-blur">
+    <nav className="border-line fixed inset-x-0 bottom-0 z-20 mx-auto w-full max-w-[430px] border-t bg-white/95 backdrop-blur md:hidden">
       <ul className="grid grid-cols-2">
         {TABS.map((tab) => {
           const active = tab.match(pathname);

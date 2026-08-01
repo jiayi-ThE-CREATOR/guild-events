@@ -18,7 +18,7 @@ export default function EventCard({ event }: { event: EventWithCount }) {
   return (
     <Link
       href={`/events/${event.id}`}
-      className="border-line hover:border-navy/30 flex gap-3 rounded-2xl border bg-white p-3 transition-colors"
+      className="border-line hover:border-navy/30 flex gap-3 rounded-2xl border bg-white p-3 transition-colors md:gap-4 md:p-5"
     >
       <div className="w-11 shrink-0 text-center">
         <div className="text-amber text-[11px] font-semibold">{month}</div>
@@ -32,7 +32,7 @@ export default function EventCard({ event }: { event: EventWithCount }) {
           <SeatBadge remaining={remaining} />
         </div>
 
-        <h2 className="text-ink text-[15px] leading-snug font-bold">
+        <h2 className="text-ink text-[15px] leading-snug font-bold md:text-base">
           {event.title}
         </h2>
 

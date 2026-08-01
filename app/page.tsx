@@ -31,17 +31,18 @@ export default function EventListPage() {
 
   return (
     <>
-      <header className="flex items-start justify-between px-4 pt-6 pb-4">
+      <header className="flex items-start justify-between px-4 pt-6 pb-4 md:px-0 md:pt-0 md:pb-6">
         <div>
-          <h1 className="text-ink text-2xl font-bold">イベント</h1>
-          <p className="text-ink-soft mt-0.5 text-xs">
+          <h1 className="text-ink text-2xl font-bold md:text-3xl">イベント</h1>
+          <p className="text-ink-soft mt-0.5 text-xs md:text-sm">
             阪大 × 京大 AIコミュニティ
           </p>
         </div>
+        {/* PC ではヘッダー右上のアバターと重複するので隠す */}
         <Link
           href="/mypage"
           aria-label="マイページ"
-          className="bg-navy-soft text-navy flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold"
+          className="bg-navy-soft text-navy flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold md:hidden"
         >
           {profile ? (
             profile.name.trim().charAt(0)
@@ -57,7 +58,7 @@ export default function EventListPage() {
         </Link>
       </header>
 
-      <div className="flex gap-2 overflow-x-auto px-4 pb-4">
+      <div className="flex gap-2 overflow-x-auto px-4 pb-4 md:px-0 md:pb-6">
         {FILTERS.map((f) => (
           <button
             key={f}
@@ -75,7 +76,7 @@ export default function EventListPage() {
         ))}
       </div>
 
-      <div className="space-y-3 px-4">
+      <div className="px-4 md:px-0">
         {error && (
           <p className="text-amber bg-amber-soft rounded-xl p-3 text-xs">
             読み込みに失敗しました：{error}
@@ -92,9 +93,12 @@ export default function EventListPage() {
           </p>
         )}
 
-        {visible.map((event) => (
-          <EventCard key={event.id} event={event} />
-        ))}
+        {/* スマホは1列、PC は2列（広い画面で3列） */}
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4 xl:grid-cols-3">
+          {visible.map((event) => (
+            <EventCard key={event.id} event={event} />
+          ))}
+        </div>
       </div>
 
       {!isSupabaseConfigured && (

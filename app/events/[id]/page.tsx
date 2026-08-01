@@ -32,54 +32,57 @@ export default function EventDetailPage() {
 
   if (error) {
     return (
-      <>
+      <div className="md:mx-auto md:max-w-3xl">
         <PageHeader title="イベント詳細" />
         <p className="text-amber bg-amber-soft m-4 rounded-xl p-3 text-xs">
           読み込みに失敗しました：{error}
         </p>
-      </>
+      </div>
     );
   }
 
   if (notFound) {
     return (
-      <>
+      <div className="md:mx-auto md:max-w-3xl">
         <PageHeader title="イベント詳細" />
         <p className="text-ink-soft py-16 text-center text-xs">
           このイベントは見つかりませんでした
         </p>
-      </>
+      </div>
     );
   }
 
   if (!event) {
     return (
-      <>
+      <div className="md:mx-auto md:max-w-3xl">
         <PageHeader title="イベント詳細" />
         <p className="text-ink-soft py-16 text-center text-xs">読み込み中…</p>
-      </>
+      </div>
     );
   }
 
   const remaining = remainingSeats(event.capacity, event.applied);
 
   return (
-    <>
+    <div className="md:mx-auto md:max-w-3xl">
       <PageHeader title="イベント詳細" />
 
-      <div className="cover-stripes h-36 w-full" aria-hidden="true" />
+      <div
+        className="cover-stripes h-36 w-full md:h-56 md:rounded-2xl"
+        aria-hidden="true"
+      />
 
-      <div className="px-4 pt-4">
+      <div className="px-4 pt-4 md:px-0 md:pt-6">
         <div className="mb-2 flex flex-wrap gap-1.5">
           <CampusBadge campus={campusOf(event.location)} />
           <SeatBadge remaining={remaining} />
         </div>
 
-        <h1 className="text-ink text-xl leading-snug font-bold">
+        <h1 className="text-ink text-xl leading-snug font-bold md:text-3xl">
           {event.title}
         </h1>
 
-        <dl className="border-line mt-4 divide-y divide-[var(--color-line)] rounded-2xl border">
+        <dl className="border-line mt-4 divide-y divide-[var(--color-line)] rounded-2xl border md:mt-6 md:bg-white">
           <Row label="日時" value={fullDateTime(event.event_date)} />
           <Row label="場所" value={event.location ?? "場所未定"} />
           <Row
@@ -93,19 +96,20 @@ export default function EventDetailPage() {
         </dl>
 
         {event.description && (
-          <p className="text-ink-soft mt-4 text-sm leading-relaxed whitespace-pre-wrap">
+          <p className="text-ink-soft mt-4 text-sm leading-relaxed whitespace-pre-wrap md:mt-6 md:text-base">
             {event.description}
           </p>
         )}
       </div>
 
-      <div className="px-4 pt-6">
+      {/* PC では全幅の帯にせず、左寄せのボタン＋補足の並びにする */}
+      <div className="px-4 pt-6 md:flex md:items-center md:gap-4 md:px-0 md:pt-8">
         {alreadyApplied ? (
           <>
-            <div className="bg-canvas text-ink-soft w-full rounded-xl py-3.5 text-center text-[15px] font-bold">
+            <div className="bg-canvas text-ink-soft w-full rounded-xl py-3.5 text-center text-[15px] font-bold md:w-auto md:px-12">
               申請済み
             </div>
-            <p className="text-ink-soft mt-2 text-center text-[11px]">
+            <p className="text-ink-soft mt-2 text-center text-[11px] md:mt-0 md:text-left md:text-xs">
               取り消しは{" "}
               <Link href="/mypage" className="text-navy underline">
                 マイページ
@@ -117,17 +121,17 @@ export default function EventDetailPage() {
           <>
             <Link
               href={`/events/${event.id}/apply`}
-              className="bg-grass block w-full rounded-xl py-3.5 text-center text-[15px] font-bold text-white shadow-[0_6px_18px_rgba(0,179,126,0.35)]"
+              className="bg-grass block w-full rounded-xl py-3.5 text-center text-[15px] font-bold text-white shadow-[0_6px_18px_rgba(0,179,126,0.35)] md:w-auto md:px-12"
             >
               参加申請する
             </Link>
-            <p className="text-ink-soft mt-2 text-center text-[11px]">
+            <p className="text-ink-soft mt-2 text-center text-[11px] md:mt-0 md:text-left md:text-xs">
               キャンセルはマイページからいつでも
             </p>
           </>
         )}
       </div>
-    </>
+    </div>
   );
 }
 
