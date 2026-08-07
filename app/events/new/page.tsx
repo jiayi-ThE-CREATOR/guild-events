@@ -4,10 +4,56 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import PageHeader from "@/components/PageHeader";
 import { createEvent } from "@/lib/data";
+import { ORGANIZERS, isOrganizer } from "@/lib/members";
+import { useProfile } from "@/lib/profile";
+import { useIsClient } from "@/lib/useIsClient";
+import Link from "next/link";
 import { composeLocation } from "@/lib/format";
 import { VENUES, type Venue } from "@/lib/types";
 
 export default function NewEventPage() {
+  const isClient = useIsClient();
+  const profile = useProfile();
+
+  if (!isClient) {
+    return (
+      <div className="md:mx-auto md:max-w-xl">
+        <PageHeader title="イベントを作成" />
+        <p className="text-ink-soft py-16 text-center text-xs">読み込み中…</p>
+      </div>
+    );
+  }
+
+  if (!isOrganizer(profile?.name)) {
+    return (
+      <div className="md:mx-auto md:max-w-xl">
+        <PageHeader title="イベントを作成" />
+        <div className="border-line mx-4 rounded-2xl border border-dashed p-6 text-center md:mx-0 md:p-8">
+          <p className="text-ink text-sm font-bold">
+            イベントを作成できるのは運営だけです
+          </p>
+          <p className="text-ink-soft mt-2 text-xs leading-relaxed">
+            現在の作成担当：{ORGANIZERS.join("・")}
+            <br />
+            {profile
+              ? `この端末は「${profile.name}」として登録されています。`
+              : "この端末はまだ登録されていません。"}
+            <br />
+            運営の方は{" "}
+            <Link href="/mypage" className="text-navy underline">
+              マイページ
+            </Link>{" "}
+            で自分の名前を選んでから開いてください。
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return <NewEventForm />;
+}
+
+function NewEventForm() {
   const router = useRouter();
 
   const [title, setTitle] = useState("");

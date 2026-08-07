@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import GuildLogo from "./GuildLogo";
 import { useProfile } from "@/lib/profile";
 
 const NAV = [
@@ -25,12 +26,15 @@ export default function SiteHeader() {
   return (
     <header className="border-line sticky top-0 z-20 hidden border-b bg-white/90 backdrop-blur md:block">
       <div className="mx-auto flex h-16 max-w-[1080px] items-center gap-8 px-6">
-        <Link href="/" className="shrink-0">
-          <span className="text-ink block text-base font-bold">
-            GUILD イベント
-          </span>
-          <span className="text-ink-soft block text-[11px]">
-            阪大 × 京大 AIコミュニティ
+        <Link href="/" className="flex shrink-0 items-center gap-2.5">
+          <GuildLogo className="h-10 w-10" />
+          <span>
+            <span className="text-ink block text-base font-bold">
+              GUILD イベント
+            </span>
+            <span className="text-ink-soft block text-[11px]">
+              阪大 × 京大 AIコミュニティ
+            </span>
           </span>
         </Link>
 

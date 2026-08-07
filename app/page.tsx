@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import EventCard from "@/components/EventCard";
+import GuildLogo from "@/components/GuildLogo";
 import { isPast, isSupabaseConfigured, listEvents } from "@/lib/data";
 import { campusOf } from "@/lib/format";
+import { isOrganizer } from "@/lib/members";
 import { useProfile } from "@/lib/profile";
 import type { EventWithCount } from "@/lib/types";
 
@@ -57,28 +59,41 @@ export default function EventListPage() {
   return (
     <>
       <header className="flex items-start justify-between px-4 pt-6 pb-4 md:px-0 md:pt-0 md:pb-6">
-        <div>
-          <h1 className="text-ink text-2xl font-bold md:text-3xl">イベント</h1>
-          <p className="text-ink-soft mt-0.5 text-xs md:text-sm">
-            阪大 × 京大 AIコミュニティ
-          </p>
+        <div className="flex items-center gap-2.5">
+          {/* PC は上部ヘッダーにロゴがあるので、ここではスマホだけ出す */}
+          <GuildLogo className="h-11 w-11 shrink-0 md:hidden" />
+          <div>
+            <h1 className="text-ink text-2xl font-bold md:text-3xl">
+              イベント
+            </h1>
+            <p className="text-ink-soft mt-0.5 text-xs md:text-sm">
+              阪大 × 京大 AIコミュニティ
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
-          <Link
-            href="/events/new"
-            aria-label="イベントを作成"
-            className="bg-navy hover:bg-ink flex h-9 w-9 items-center justify-center rounded-full text-white transition-colors"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M12 5v14M5 12h14"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.4"
-                strokeLinecap="round"
-              />
-            </svg>
-          </Link>
+          {isOrganizer(profile?.name) && (
+            <Link
+              href="/events/new"
+              aria-label="イベントを作成"
+              className="bg-navy hover:bg-ink flex h-9 w-9 items-center justify-center rounded-full text-white transition-colors"
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  d="M12 5v14M5 12h14"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </Link>
+          )}
           {/* PC ではヘッダー右上のアバターと重複するので隠す */}
           <Link
             href="/mypage"

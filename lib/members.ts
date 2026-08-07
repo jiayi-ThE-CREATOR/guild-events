@@ -29,3 +29,17 @@ export const MEMBERS = [
 export function isMember(name: string): boolean {
   return (MEMBERS as readonly string[]).includes(name);
 }
+
+/**
+ * イベントを作成できる人。ここに入っている名前でこの端末に登録されている場合だけ
+ * 一覧の「＋」と作成画面が出る。
+ *
+ * ただし認証が無いので、これは「見せる／見せない」の制御でしかない。
+ * URL を直接開いたり API を直接叩けば誰でも作れてしまう点は変わらない。
+ * 本当に絞るならログイン（Supabase Auth）＋ RLS が必要。
+ */
+export const ORGANIZERS: readonly string[] = ["きむら"];
+
+export function isOrganizer(name: string | null | undefined): boolean {
+  return name != null && ORGANIZERS.includes(name);
+}
