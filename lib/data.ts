@@ -106,6 +106,29 @@ export async function getEvent(id: string): Promise<EventWithCount | null> {
   return { ...event, applied };
 }
 
+/** そのイベントに申請している人（キャンセル済みは除く）を申請順に返す */
+export async function listApplicantsByEvent(
+  eventId: string,
+): Promise<ApplicationRecord[]> {
+  const sb = getSupabase();
+  if (sb) {
+    const { data, error } = await sb
+      .from("applications")
+      .select(
+        "id, event_id, name, university, status, discord, note, created_at",
+      )
+      .eq("event_id", eventId)
+      .in("status", ACTIVE)
+      .order("created_at", { ascending: true });
+    if (error) throw new Error(error.message);
+    return (data ?? []) as ApplicationRecord[];
+  }
+
+  return activeApplications()
+    .filter((a) => a.event_id === eventId)
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+}
+
 /**
  * 定員と二重申請を弾いてから登録する。
  * ここでの検査は「押す前に気づかせる」ためのもので、同時申請の競合までは防げない。

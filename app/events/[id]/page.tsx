@@ -3,12 +3,16 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { CampusBadge, SeatBadge } from "@/components/Badge";
+import { Badge, CampusBadge, SeatBadge } from "@/components/Badge";
 import PageHeader from "@/components/PageHeader";
-import { getEvent, listApplicationsByName } from "@/lib/data";
+import {
+  getEvent,
+  listApplicantsByEvent,
+  listApplicationsByName,
+} from "@/lib/data";
 import { campusOf, fullDateTime, remainingSeats } from "@/lib/format";
 import { loadProfile } from "@/lib/profile";
-import type { EventWithCount } from "@/lib/types";
+import type { ApplicationRecord, EventWithCount } from "@/lib/types";
 
 export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -16,11 +20,17 @@ export default function EventDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [alreadyApplied, setAlreadyApplied] = useState(false);
+  const [applicants, setApplicants] = useState<ApplicationRecord[] | null>(null);
 
   useEffect(() => {
     getEvent(id)
       .then((found) => (found ? setEvent(found) : setNotFound(true)))
       .catch((e: Error) => setError(e.message));
+
+    // 一覧の取得に失敗しても本体は表示したいので、ここでは握りつぶす
+    listApplicantsByEvent(id)
+      .then(setApplicants)
+      .catch(() => setApplicants([]));
 
     const profile = loadProfile();
     if (profile) {
@@ -140,6 +150,42 @@ export default function EventDetailPage() {
           </>
         )}
       </div>
+
+      <section className="px-4 pt-8 md:px-0 md:pt-10">
+        <h2 className="text-ink mb-3 text-sm font-bold md:text-base">
+          参加者（{applicants?.length ?? 0}）
+        </h2>
+
+        {applicants === null && (
+          <p className="text-ink-soft py-6 text-center text-xs">読み込み中…</p>
+        )}
+
+        {applicants?.length === 0 && (
+          <p className="border-line text-ink-soft rounded-2xl border border-dashed p-6 text-center text-xs">
+            まだ申請はありません
+          </p>
+        )}
+
+        {applicants !== null && applicants.length > 0 && (
+          <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            {applicants.map((a) => (
+              <li
+                key={a.id}
+                className="border-line flex items-center gap-2.5 rounded-xl border bg-white px-3 py-2.5"
+              >
+                <span className="bg-navy-soft text-navy flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold">
+                  {a.name.trim().charAt(0)}
+                </span>
+                <span className="text-ink min-w-0 flex-1 truncate text-sm font-semibold">
+                  {a.name}
+                </span>
+                {a.status === "attended" && <Badge tone="outline">出席済</Badge>}
+                <Badge tone="navy">{a.university}</Badge>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }
