@@ -22,7 +22,9 @@ export default function EventDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [alreadyApplied, setAlreadyApplied] = useState(false);
-  const [applicants, setApplicants] = useState<ApplicationRecord[] | null>(null);
+  const [applicants, setApplicants] = useState<ApplicationRecord[] | null>(
+    null,
+  );
 
   useEffect(() => {
     getEvent(id)
@@ -197,7 +199,9 @@ export default function EventDetailPage() {
                 <span className="text-ink min-w-0 flex-1 truncate text-sm font-semibold">
                   {a.name}
                 </span>
-                {a.status === "attended" && <Badge tone="outline">出席済</Badge>}
+                {a.status === "attended" && (
+                  <Badge tone="outline">出席済</Badge>
+                )}
                 <Badge tone="navy">{a.university}</Badge>
               </li>
             ))}

@@ -79,8 +79,8 @@ export default function MyPage() {
         onFound={(found, name) => {
           const next: Profile = {
             name,
-            university: toUniversity(found[0].university),
-            discord: found[0].discord,
+            university: found[0] ? toUniversity(found[0].university) : null,
+            discord: found[0]?.discord ?? null,
           };
           saveProfile(next);
           setRows(found);
@@ -111,13 +111,7 @@ export default function MyPage() {
             {profile.name}
           </h1>
           <p className="text-ink-soft text-xs md:text-sm">
-            {profile.university}
-            {profile.discord && (
-              <>
-                <span className="mx-1.5">・</span>
-                {profile.discord}
-              </>
-            )}
+            {[profile.university, profile.discord].filter(Boolean).join(" ・ ")}
           </p>
         </div>
         <button
@@ -149,7 +143,10 @@ export default function MyPage() {
               <p className="border-line text-ink-soft rounded-2xl border border-dashed p-6 text-center text-xs">
                 まだ申し込んでいません
                 <br />
-                <Link href="/" className="text-navy mt-1 inline-block underline">
+                <Link
+                  href="/"
+                  className="text-navy mt-1 inline-block underline"
+                >
                   イベントを探す
                 </Link>
               </p>
@@ -240,12 +237,9 @@ function NameSearch({
     setSearching(true);
     setMessage(null);
     try {
-      const found = await listApplicationsByName(trimmed);
-      if (found.length === 0) {
-        setMessage("この名前の申請は見つかりませんでした");
-      } else {
-        onFound(found, trimmed);
-      }
+      // 申請が 0 件でも登録する。まだ何も申し込んでいない人でも
+      // マイページを自分のものとして使えるようにするため
+      onFound(await listApplicationsByName(trimmed), trimmed);
     } catch (err) {
       setMessage((err as Error).message);
     } finally {
@@ -261,7 +255,10 @@ function NameSearch({
       </p>
 
       <form onSubmit={handleSearch} className="mt-5 space-y-3">
-        <label htmlFor="search-name" className="text-ink block text-xs font-semibold">
+        <label
+          htmlFor="search-name"
+          className="text-ink block text-xs font-semibold"
+        >
           お名前
         </label>
         <NameSelect id="search-name" value={name} onChange={setName} />
@@ -274,7 +271,7 @@ function NameSearch({
         </button>
       </form>
 
-      {message && <p className="text-ink-soft mt-3 text-xs">{message}</p>}
+      {message && <p className="text-amber mt-3 text-xs">{message}</p>}
 
       <p className="text-ink-soft mt-6 text-center text-[11px]">
         まだ申し込んでいない方は{" "}

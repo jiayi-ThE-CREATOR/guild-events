@@ -10,6 +10,12 @@
   --color-grass-soft: #e0f6ee;
   --color-amber: #e07b1f;
   --color-amber-soft: #fcefdf;
+  /* 大学の色分け（阪大＝青 / 京大＝赤） */
+  --color-osaka: #2563eb;
+  --color-osaka-soft: #e5edfd;
+  --color-kyoto: #d92d2d;
+  --color-kyoto-soft: #fde8e8;
+
   --color-line: #e6eaf3;
   --color-canvas: #eef1f8;
 

@@ -42,3 +42,16 @@ export type NewApplication = {
   discord: string | null;
   note: string | null;
 };
+
+/** イベント作成時の「場所」の区分。詳細と組み合わせて location 文字列を作る */
+export const VENUES = ["阪大", "京大", "オンライン"] as const;
+export type Venue = (typeof VENUES)[number];
+
+export type NewEvent = {
+  title: string;
+  description: string | null;
+  location: string | null;
+  /** ISO8601 */
+  event_date: string;
+  capacity: number | null;
+};

@@ -14,7 +14,8 @@ const KEY = "guild-events:profile";
  */
 export type Profile = {
   name: string;
-  university: University;
+  /** 申請が1件も無い状態で名前だけ登録した場合は不明なので null */
+  university: University | null;
   discord: string | null;
 };
 

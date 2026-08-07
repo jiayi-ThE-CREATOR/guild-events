@@ -9,6 +9,7 @@ import type {
   EventRecord,
   EventWithCount,
   NewApplication,
+  NewEvent,
 } from "./types";
 
 /**
@@ -56,7 +57,10 @@ export async function listEvents(): Promise<EventWithCount[]> {
     const { data: apps, error: appsError } = await sb
       .from("applications")
       .select("event_id")
-      .in("event_id", (events ?? []).map((e) => e.id))
+      .in(
+        "event_id",
+        (events ?? []).map((e) => e.id),
+      )
       .in("status", ACTIVE);
     if (appsError) throw new Error(appsError.message);
 
@@ -80,6 +84,21 @@ export function isPast(event: { event_date: string }): boolean {
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
   return new Date(event.event_date) < startOfToday;
+}
+
+/** イベントを新規作成する（認証が無いので誰でも作れる） */
+export async function createEvent(input: NewEvent): Promise<EventRecord> {
+  const sb = getSupabase();
+  if (sb) {
+    const { data, error } = await sb
+      .from("events")
+      .insert(input)
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return data as EventRecord;
+  }
+  return mockStore.insertEvent(input);
 }
 
 export async function getEvent(id: string): Promise<EventWithCount | null> {

@@ -4,8 +4,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const TABS = [
-  { href: "/", label: "イベント", match: (p: string) => p === "/" || p.startsWith("/events") },
-  { href: "/mypage", label: "マイページ", match: (p: string) => p.startsWith("/mypage") },
+  {
+    href: "/",
+    label: "イベント",
+    match: (p: string) => p === "/" || p.startsWith("/events"),
+  },
+  {
+    href: "/mypage",
+    label: "マイページ",
+    match: (p: string) => p.startsWith("/mypage"),
+  },
 ];
 
 export default function BottomNav() {
@@ -60,7 +68,11 @@ function CalendarIcon({ filled }: { filled: boolean }) {
         strokeWidth="1.8"
         strokeLinecap="round"
       />
-      <path d="M3.5 10h17" stroke={filled ? "#fff" : "currentColor"} strokeWidth="1.8" />
+      <path
+        d="M3.5 10h17"
+        stroke={filled ? "#fff" : "currentColor"}
+        strokeWidth="1.8"
+      />
     </svg>
   );
 }

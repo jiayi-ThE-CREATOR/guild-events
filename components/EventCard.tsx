@@ -18,7 +18,9 @@ export default function EventCard({
 }) {
   const { month, day, weekday } = dateBlock(event.event_date);
   const remaining = remainingSeats(event.capacity, event.applied);
-  const ratio = event.capacity ? Math.min(event.applied / event.capacity, 1) : 0;
+  const ratio = event.capacity
+    ? Math.min(event.applied / event.capacity, 1)
+    : 0;
   const tight = remaining !== null && remaining <= 5;
 
   return (

@@ -24,8 +24,8 @@ export default function CalendarLinks({ event }: { event: EventRecord }) {
 
       <p className="text-ink-soft mt-2 text-[11px] leading-relaxed md:text-xs">
         ※ Outlook / Google はログイン済みであることをご確認ください。
-        <br />※ Outlook
-        は組織アカウントの場合は Office365 でカレンダー追加をするようにしてください。
+        <br />※ Outlook は組織アカウントの場合は Office365
+        でカレンダー追加をするようにしてください。
       </p>
 
       <div className="mt-3 flex flex-wrap gap-2">

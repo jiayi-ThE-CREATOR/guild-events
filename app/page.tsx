@@ -8,8 +8,21 @@ import { campusOf } from "@/lib/format";
 import { useProfile } from "@/lib/profile";
 import type { EventWithCount } from "@/lib/types";
 
-const FILTERS = ["すべて", "阪大", "京大", "オンライン"] as const;
-type Filter = (typeof FILTERS)[number];
+// 大学の区分は 阪大（青）／京大（赤）の2つだけ。オンラインは場所欄で表す
+const FILTERS = [
+  { key: "すべて", on: "bg-navy text-white", off: "border-line text-ink-soft" },
+  {
+    key: "阪大",
+    on: "bg-osaka text-white",
+    off: "border-osaka-soft text-osaka",
+  },
+  {
+    key: "京大",
+    on: "bg-kyoto text-white",
+    off: "border-kyoto-soft text-kyoto",
+  },
+] as const;
+type Filter = (typeof FILTERS)[number]["key"];
 
 const TABS = [
   { key: "upcoming", label: "これからのイベント" },
@@ -36,10 +49,7 @@ export default function EventListPage() {
       tab === "past" ? isPast(e) : !isPast(e),
     );
     // 終了したものは新しい順、これからのものは近い順
-    const sorted =
-      tab === "past"
-        ? [...inTab].reverse()
-        : inTab;
+    const sorted = tab === "past" ? [...inTab].reverse() : inTab;
     if (filter === "すべて") return sorted;
     return sorted.filter((e) => campusOf(e.location) === filter);
   }, [events, filter, tab]);
@@ -53,24 +63,46 @@ export default function EventListPage() {
             阪大 × 京大 AIコミュニティ
           </p>
         </div>
-        {/* PC ではヘッダー右上のアバターと重複するので隠す */}
-        <Link
-          href="/mypage"
-          aria-label="マイページ"
-          className="bg-navy-soft text-navy flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold md:hidden"
-        >
-          {profile ? (
-            profile.name.trim().charAt(0)
-          ) : (
+        <div className="flex items-center gap-2">
+          <Link
+            href="/events/new"
+            aria-label="イベントを作成"
+            className="bg-navy hover:bg-ink flex h-9 w-9 items-center justify-center rounded-full text-white transition-colors"
+          >
             <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="12" cy="8.5" r="3.5" fill="currentColor" />
               <path
-                d="M5 20c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5"
-                fill="currentColor"
+                d="M12 5v14M5 12h14"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
               />
             </svg>
-          )}
-        </Link>
+          </Link>
+          {/* PC ではヘッダー右上のアバターと重複するので隠す */}
+          <Link
+            href="/mypage"
+            aria-label="マイページ"
+            className="bg-navy-soft text-navy flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold md:hidden"
+          >
+            {profile ? (
+              profile.name.trim().charAt(0)
+            ) : (
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="8.5" r="3.5" fill="currentColor" />
+                <path
+                  d="M5 20c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5"
+                  fill="currentColor"
+                />
+              </svg>
+            )}
+          </Link>
+        </div>
       </header>
 
       <div
@@ -99,17 +131,17 @@ export default function EventListPage() {
       <div className="flex gap-2 overflow-x-auto px-4 pb-4 md:px-0 md:pb-6">
         {FILTERS.map((f) => (
           <button
-            key={f}
+            key={f.key}
             type="button"
-            onClick={() => setFilter(f)}
-            aria-pressed={filter === f}
-            className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold transition-colors ${
-              filter === f
-                ? "bg-navy text-white"
-                : "border-line text-ink-soft border bg-white"
+            onClick={() => setFilter(f.key)}
+            aria-pressed={filter === f.key}
+            className={`shrink-0 rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors ${
+              filter === f.key
+                ? `${f.on} border-transparent`
+                : `${f.off} bg-white`
             }`}
           >
-            {f}
+            {f.key}
           </button>
         ))}
       </div>

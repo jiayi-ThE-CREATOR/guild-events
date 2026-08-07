@@ -14,7 +14,10 @@ function startEnd(event: EventRecord) {
 
 /** 20260808T040000Z 形式（Google / iCal 用） */
 function utcCompact(d: Date) {
-  return d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  return d
+    .toISOString()
+    .replace(/[-:]/g, "")
+    .replace(/\.\d{3}/, "");
 }
 
 function details(event: EventRecord) {

@@ -65,3 +65,16 @@ export function remainingSeats(capacity: number | null, applied: number) {
   if (capacity === null) return null;
   return Math.max(capacity - applied, 0);
 }
+
+/**
+ * イベント作成画面の「区分＋詳細」から location 文字列を組み立てる。
+ * campusOf が確実に拾える接頭辞を付けるのが目的。
+ */
+export function composeLocation(venue: Campus, detail: string): string {
+  const trimmed = detail.trim();
+  if (venue === "オンライン") {
+    return trimmed ? `オンライン（${trimmed}）` : "オンライン";
+  }
+  const prefix = venue === "阪大" ? "大阪大学" : "京都大学";
+  return trimmed ? `${prefix} ${trimmed}` : prefix;
+}

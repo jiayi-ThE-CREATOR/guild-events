@@ -101,6 +101,10 @@ alter table applications enable row level security;
 create policy "read_events" on events
   for select using (true);
 
+-- アプリの作成画面から追加できるようにする（本番なら運営だけに絞る）
+create policy "insert_events" on events
+  for insert with check (true);
+
 create policy "all_applications" on applications
   for all using (true) with check (true);
 
