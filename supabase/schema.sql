@@ -46,36 +46,50 @@ create unique index applications_one_per_person
 -- ============================================================
 -- ③ 定員オーバーの禁止
 --    アプリ側でも弾いているが、同時申請では競り勝てないので DB 側で止める。
---    events の行をロックしてから数えるため、同時に押されても定員を超えない。
+--
+--    security definer が必須。RLS 有効なテーブルに SELECT ... FOR UPDATE を
+--    かけると UPDATE ポリシーが無いぶん 0 行しか返らず、定員が NULL＝無制限と
+--    誤判定されて素通りする（実測で踏んだ）。
+--    AFTER STATEMENT ＋ 遷移テーブルにしてあるのは、1 文で複数行 insert された
+--    場合に BEFORE ROW だと同じ文の行がまだ見えず数え漏らすため。
 -- ============================================================
 create or replace function check_event_capacity()
 returns trigger
 language plpgsql
+security definer
+set search_path = public
 as $$
 declare
-  cap int;
-  taken int;
+  r record;
 begin
-  select capacity into cap from events where id = new.event_id for update;
-  if cap is null then
-    return new;  -- 定員なしのイベント
-  end if;
+  -- 対象イベントの行をロックしてから数える（同時申請を直列化）
+  perform 1 from events
+   where id in (select distinct event_id from inserted)
+   order by id
+     for update;
 
-  select count(*) into taken
-    from applications
-   where event_id = new.event_id and status <> 'cancelled';
+  for r in
+    select e.id, e.capacity, count(a.id) as taken
+      from events e
+      join applications a
+        on a.event_id = e.id and a.status <> 'cancelled'
+     where e.id in (select distinct event_id from inserted)
+     group by e.id, e.capacity
+  loop
+    if r.capacity is not null and r.taken > r.capacity then
+      raise exception '満席のため申請できません';
+    end if;
+  end loop;
 
-  if taken >= cap then
-    raise exception '満席のため申請できません';
-  end if;
-
-  return new;
+  return null;
 end;
 $$;
 
 create trigger applications_capacity_guard
-  before insert on applications
-  for each row execute function check_event_capacity();
+  after insert on applications
+  referencing new table as inserted
+  for each statement
+  execute function check_event_capacity();
 
 -- ============================================================
 -- ④ セキュリティ設定 RLS（STEP 16）— 勉強会用に全開放
