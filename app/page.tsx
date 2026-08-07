@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import EventCard from "@/components/EventCard";
-import { isSupabaseConfigured, listUpcomingEvents } from "@/lib/data";
+import { isPast, isSupabaseConfigured, listEvents } from "@/lib/data";
 import { campusOf } from "@/lib/format";
 import { useProfile } from "@/lib/profile";
 import type { EventWithCount } from "@/lib/types";
@@ -11,23 +11,38 @@ import type { EventWithCount } from "@/lib/types";
 const FILTERS = ["すべて", "阪大", "京大", "オンライン"] as const;
 type Filter = (typeof FILTERS)[number];
 
+const TABS = [
+  { key: "upcoming", label: "これからのイベント" },
+  { key: "past", label: "もう終わったイベント" },
+] as const;
+type Tab = (typeof TABS)[number]["key"];
+
 export default function EventListPage() {
   const [events, setEvents] = useState<EventWithCount[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("すべて");
+  const [tab, setTab] = useState<Tab>("upcoming");
   const profile = useProfile();
 
   useEffect(() => {
-    listUpcomingEvents()
+    listEvents()
       .then(setEvents)
       .catch((e: Error) => setError(e.message));
   }, []);
 
   const visible = useMemo(() => {
     if (!events) return [];
-    if (filter === "すべて") return events;
-    return events.filter((e) => campusOf(e.location) === filter);
-  }, [events, filter]);
+    const inTab = events.filter((e) =>
+      tab === "past" ? isPast(e) : !isPast(e),
+    );
+    // 終了したものは新しい順、これからのものは近い順
+    const sorted =
+      tab === "past"
+        ? [...inTab].reverse()
+        : inTab;
+    if (filter === "すべて") return sorted;
+    return sorted.filter((e) => campusOf(e.location) === filter);
+  }, [events, filter, tab]);
 
   return (
     <>
@@ -57,6 +72,29 @@ export default function EventListPage() {
           )}
         </Link>
       </header>
+
+      <div
+        role="tablist"
+        aria-label="開催状況"
+        className="mb-3 grid grid-cols-2 gap-2 px-4 md:mb-4 md:px-0"
+      >
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.key}
+            onClick={() => setTab(t.key)}
+            className={`rounded-xl py-2.5 text-xs font-semibold transition-colors md:text-sm ${
+              tab === t.key
+                ? "bg-navy text-white"
+                : "border-line text-ink-soft border bg-white"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
 
       <div className="flex gap-2 overflow-x-auto px-4 pb-4 md:px-0 md:pb-6">
         {FILTERS.map((f) => (
@@ -89,14 +127,16 @@ export default function EventListPage() {
 
         {events && visible.length === 0 && (
           <p className="text-ink-soft py-10 text-center text-xs">
-            該当するイベントはありません
+            {tab === "past"
+              ? "終了したイベントはありません"
+              : "予定されているイベントはありません"}
           </p>
         )}
 
         {/* スマホは1列、PC は2列（広い画面で3列） */}
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4 xl:grid-cols-3">
           {visible.map((event) => (
-            <EventCard key={event.id} event={event} />
+            <EventCard key={event.id} event={event} past={tab === "past"} />
           ))}
         </div>
       </div>

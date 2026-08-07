@@ -4,9 +4,11 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Badge, CampusBadge, SeatBadge } from "@/components/Badge";
+import CalendarLinks from "@/components/CalendarLinks";
 import PageHeader from "@/components/PageHeader";
 import {
   getEvent,
+  isPast,
   listApplicantsByEvent,
   listApplicationsByName,
 } from "@/lib/data";
@@ -72,6 +74,7 @@ export default function EventDetailPage() {
   }
 
   const remaining = remainingSeats(event.capacity, event.applied);
+  const past = isPast(event);
 
   return (
     <div className="md:mx-auto md:max-w-3xl">
@@ -114,7 +117,16 @@ export default function EventDetailPage() {
 
       {/* PC では全幅の帯にせず、左寄せのボタン＋補足の並びにする */}
       <div className="px-4 pt-6 md:flex md:items-center md:gap-4 md:px-0 md:pt-8">
-        {alreadyApplied ? (
+        {past ? (
+          <>
+            <div className="bg-canvas text-ink-soft w-full rounded-xl py-3.5 text-center text-[15px] font-bold md:w-auto md:px-12">
+              このイベントは終了しました
+            </div>
+            <p className="text-ink-soft mt-2 text-center text-[11px] md:mt-0 md:text-left md:text-xs">
+              {alreadyApplied ? "参加ありがとうございました" : ""}
+            </p>
+          </>
+        ) : alreadyApplied ? (
           <>
             <div className="bg-canvas text-ink-soft w-full rounded-xl py-3.5 text-center text-[15px] font-bold md:w-auto md:px-12">
               申請済み
@@ -150,6 +162,12 @@ export default function EventDetailPage() {
           </>
         )}
       </div>
+
+      {alreadyApplied && !past && (
+        <div className="px-4 pt-6 md:px-0 md:pt-8">
+          <CalendarLinks event={event} />
+        </div>
+      )}
 
       <section className="px-4 pt-8 md:px-0 md:pt-10">
         <h2 className="text-ink mb-3 text-sm font-bold md:text-base">

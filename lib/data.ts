@@ -43,17 +43,13 @@ function activeApplications(): ApplicationRecord[] {
   return mockStore.applications().filter((a) => a.status !== "cancelled");
 }
 
-/** 開催予定のイベント（今日 0:00 以降）を日付昇順で返す */
-export async function listUpcomingEvents(): Promise<EventWithCount[]> {
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-
+/** イベントを日付昇順で全件返す。これから／終了の振り分けは画面側で行う */
+export async function listEvents(): Promise<EventWithCount[]> {
   const sb = getSupabase();
   if (sb) {
     const { data: events, error } = await sb
       .from("events")
       .select("id, title, description, location, event_date, capacity")
-      .gte("event_date", startOfToday.toISOString())
       .order("event_date", { ascending: true });
     if (error) throw new Error(error.message);
 
@@ -74,9 +70,16 @@ export async function listUpcomingEvents(): Promise<EventWithCount[]> {
   const counts = countByEvent(activeApplications());
   return mockStore
     .events()
-    .filter((e) => new Date(e.event_date) >= startOfToday)
+    .slice()
     .sort(byDateAsc)
     .map((e) => ({ ...e, applied: counts.get(e.id) ?? 0 }));
+}
+
+/** そのイベントが既に終了しているか（当日中は「これから」に残す） */
+export function isPast(event: { event_date: string }): boolean {
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  return new Date(event.event_date) < startOfToday;
 }
 
 export async function getEvent(id: string): Promise<EventWithCount | null> {
