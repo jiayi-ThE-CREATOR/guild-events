@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/Badge";
+import NameSelect from "@/components/NameSelect";
 import { cancelApplication, listApplicationsByName } from "@/lib/data";
 import { fullDateTime, shortLocation } from "@/lib/format";
 import {
@@ -256,21 +257,14 @@ function NameSearch({
     <div className="border-line px-4 pt-6 md:mx-auto md:max-w-md md:rounded-2xl md:border md:bg-white md:p-8">
       <h1 className="text-ink text-2xl font-bold">マイページ</h1>
       <p className="text-ink-soft mt-1 text-xs md:text-sm">
-        申請したときのお名前で、自分の申込状況を確認できます
+        お名前を選ぶと、自分の申込状況を確認できます
       </p>
 
       <form onSubmit={handleSearch} className="mt-5 space-y-3">
         <label htmlFor="search-name" className="text-ink block text-xs font-semibold">
           お名前
         </label>
-        <input
-          id="search-name"
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="山田 太郎"
-          className="border-line focus:border-navy text-ink w-full rounded-xl border px-3.5 py-3 text-[15px] outline-none"
-        />
+        <NameSelect id="search-name" value={name} onChange={setName} />
         <button
           type="submit"
           disabled={!name.trim() || searching}

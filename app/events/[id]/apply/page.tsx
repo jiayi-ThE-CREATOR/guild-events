@@ -2,6 +2,7 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import NameSelect from "@/components/NameSelect";
 import PageHeader from "@/components/PageHeader";
 import { createApplication, getEvent } from "@/lib/data";
 import { fullDateTime, shortLocation } from "@/lib/format";
@@ -106,15 +107,7 @@ function ApplyForm({ eventId }: { eventId: string }) {
       )}
 
       <Field label="お名前" htmlFor="name" required>
-        <input
-          id="name"
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-          placeholder="山田 太郎"
-          className="border-line focus:border-navy text-ink w-full rounded-xl border px-3.5 py-3 text-[15px] outline-none"
-        />
+        <NameSelect id="name" value={name} onChange={setName} />
       </Field>
 
       <Field label="所属" required>
