@@ -78,3 +78,25 @@ export function composeLocation(venue: Campus, detail: string): string {
   const prefix = venue === "阪大" ? "大阪大学" : "京都大学";
   return trimmed ? `${prefix} ${trimmed}` : prefix;
 }
+
+/** composeLocation の逆。編集画面で「区分＋詳細」に戻す */
+export function parseLocation(location: string | null): {
+  venue: Campus | "";
+  detail: string;
+} {
+  const value = location ?? "";
+  const online = value.match(/^オンライン(?:（(.*)）)?$/);
+  if (online) return { venue: "オンライン", detail: online[1] ?? "" };
+  if (value.startsWith("大阪大学"))
+    return { venue: "阪大", detail: value.replace(/^大阪大学\s*/, "") };
+  if (value.startsWith("京都大学"))
+    return { venue: "京大", detail: value.replace(/^京都大学\s*/, "") };
+  return { venue: "", detail: value };
+}
+
+/** ISO → input[type=datetime-local] の値（端末のローカル時刻） */
+export function toDateTimeLocal(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}

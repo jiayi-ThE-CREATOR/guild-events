@@ -1,24 +1,29 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Badge, CampusBadge, SeatBadge } from "@/components/Badge";
 import CalendarLinks from "@/components/CalendarLinks";
 import PageHeader from "@/components/PageHeader";
 import {
+  deleteEvent,
   getEvent,
   isPast,
   listApplicantsByEvent,
   listApplicationsByName,
 } from "@/lib/data";
 import { campusOf, fullDateTime, remainingSeats } from "@/lib/format";
-import { loadProfile } from "@/lib/profile";
+import { isOrganizer } from "@/lib/members";
+import { loadProfile, useProfile } from "@/lib/profile";
 import type { ApplicationRecord, EventWithCount } from "@/lib/types";
 
 export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  const profile = useProfile();
   const [event, setEvent] = useState<EventWithCount | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [alreadyApplied, setAlreadyApplied] = useState(false);
@@ -43,6 +48,28 @@ export default function EventDetailPage() {
         .catch(() => setAlreadyApplied(false));
     }
   }, [id]);
+
+  async function handleDelete() {
+    if (!event || deleting) return;
+    const count = applicants?.length ?? 0;
+    const warning =
+      count > 0 ? `\n\n申請中の${count}名の記録も一緒に消えます。` : "";
+    if (
+      !window.confirm(
+        `「${event.title}」を削除します。${warning}\n\nこの操作は取り消せません。`,
+      )
+    ) {
+      return;
+    }
+    setDeleting(true);
+    try {
+      await deleteEvent(event.id);
+      router.replace("/");
+    } catch (e) {
+      setError((e as Error).message);
+      setDeleting(false);
+    }
+  }
 
   if (error) {
     return (
@@ -208,6 +235,30 @@ export default function EventDetailPage() {
           </ul>
         )}
       </section>
+
+      {/* 運営だけに出す。取り消せない操作なので他と離して置く */}
+      {isOrganizer(profile?.name) && (
+        <section className="px-4 pt-10 pb-2 md:px-0 md:pt-12">
+          <h2 className="text-ink-soft mb-2 text-xs font-bold">運営メニュー</h2>
+          <Link
+            href={`/events/${event.id}/edit`}
+            className="border-line text-ink hover:border-navy mb-2 block w-full rounded-xl border py-3 text-center text-sm font-bold transition-colors md:mr-2 md:mb-0 md:inline-block md:w-auto md:px-8"
+          >
+            このイベントを編集
+          </Link>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={deleting}
+            className="border-kyoto-soft text-kyoto hover:bg-kyoto w-full rounded-xl border py-3 text-sm font-bold transition-colors hover:text-white disabled:opacity-40 md:w-auto md:px-8"
+          >
+            {deleting ? "削除中…" : "このイベントを削除"}
+          </button>
+          <p className="text-ink-soft mt-2 text-[11px]">
+            イベントを消すと、そのイベントへの申請もすべて消えます。元に戻せません。
+          </p>
+        </section>
+      )}
     </div>
   );
 }

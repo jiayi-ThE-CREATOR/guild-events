@@ -101,6 +101,55 @@ export async function createEvent(input: NewEvent): Promise<EventRecord> {
   return mockStore.insertEvent(input);
 }
 
+/** イベントの内容を書き換える */
+export async function updateEvent(
+  id: string,
+  input: NewEvent,
+): Promise<EventRecord> {
+  const sb = getSupabase();
+  if (sb) {
+    // 削除と同じく、更新ポリシーが無いと 0 件更新で「成功」してしまう
+    const { data, error } = await sb
+      .from("events")
+      .update(input)
+      .eq("id", id)
+      .select();
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) {
+      throw new Error(
+        "更新できませんでした（DB の更新ポリシーが未設定の可能性があります）",
+      );
+    }
+    return data[0] as EventRecord;
+  }
+  return mockStore.updateEvent(id, input);
+}
+
+/**
+ * イベントを削除する。applications は ON DELETE CASCADE で一緒に消える。
+ * 元に戻せないので、呼ぶ前に必ず確認を取ること。
+ */
+export async function deleteEvent(id: string): Promise<void> {
+  const sb = getSupabase();
+  if (sb) {
+    // RLS に削除ポリシーが無いと、エラーにならず 0 件削除で「成功」してしまう。
+    // 消えた行を返させて、本当に消えたか確かめる。
+    const { data, error } = await sb
+      .from("events")
+      .delete()
+      .eq("id", id)
+      .select("id");
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) {
+      throw new Error(
+        "削除できませんでした（DB の削除ポリシーが未設定の可能性があります）",
+      );
+    }
+    return;
+  }
+  mockStore.removeEvent(id);
+}
+
 export async function getEvent(id: string): Promise<EventWithCount | null> {
   const sb = getSupabase();
   if (sb) {

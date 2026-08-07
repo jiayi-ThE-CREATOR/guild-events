@@ -105,6 +105,14 @@ create policy "read_events" on events
 create policy "insert_events" on events
   for insert with check (true);
 
+-- 編集ボタン用
+create policy "update_events" on events
+  for update using (true) with check (true);
+
+-- 削除ボタン用。applications は ON DELETE CASCADE で道連れになる
+create policy "delete_events" on events
+  for delete using (true);
+
 create policy "all_applications" on applications
   for all using (true) with check (true);
 

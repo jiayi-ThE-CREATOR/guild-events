@@ -45,6 +45,28 @@ export const mockStore = {
     return row;
   },
 
+  updateEvent(id: string, input: NewEvent): EventRecord {
+    const rows = read(EVENTS_KEY, MOCK_EVENTS).map((e) =>
+      e.id === id ? { ...e, ...input } : e,
+    );
+    write(EVENTS_KEY, rows);
+    return rows.find((e) => e.id === id)!;
+  },
+
+  /** DB の ON DELETE CASCADE に合わせ、そのイベントの申請も消す */
+  removeEvent(id: string) {
+    write(
+      EVENTS_KEY,
+      read(EVENTS_KEY, MOCK_EVENTS).filter((e) => e.id !== id),
+    );
+    write(
+      APPLICATIONS_KEY,
+      read(APPLICATIONS_KEY, MOCK_APPLICATIONS).filter(
+        (a) => a.event_id !== id,
+      ),
+    );
+  },
+
   applications(): ApplicationRecord[] {
     return read(APPLICATIONS_KEY, MOCK_APPLICATIONS);
   },
