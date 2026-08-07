@@ -7,5 +7,7 @@
 --
 -- SQL Editor に貼って Run するだけ。データは変更しない。
 
+drop policy if exists "insert_events" on events;
+
 create policy "insert_events" on events
   for insert with check (true);
