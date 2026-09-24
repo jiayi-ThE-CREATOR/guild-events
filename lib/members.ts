@@ -24,6 +24,9 @@ export const MEMBERS = [
   "嶋田 千真",
   "木野本　輝",
   "清水崇仁郎",
+  "政岡桜輔",
+  "松下大輔",
+  "王力明",
 ] as const;
 
 export function isMember(name: string): boolean {
