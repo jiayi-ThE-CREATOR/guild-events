@@ -6,9 +6,16 @@ import type { EventRecord } from "./types";
  */
 export const DEFAULT_DURATION_HOURS = 2;
 
-function startEnd(event: EventRecord) {
+/** カレンダーに登録できるもの。会議のように長さが決まっていれば duration_min を渡す */
+export type CalendarItem = Pick<
+  EventRecord,
+  "id" | "title" | "description" | "location" | "event_date"
+> & { duration_min?: number };
+
+function startEnd(event: CalendarItem) {
   const start = new Date(event.event_date);
-  const end = new Date(start.getTime() + DEFAULT_DURATION_HOURS * 3600 * 1000);
+  const minutes = event.duration_min ?? DEFAULT_DURATION_HOURS * 60;
+  const end = new Date(start.getTime() + minutes * 60 * 1000);
   return { start, end };
 }
 
@@ -20,11 +27,11 @@ function utcCompact(d: Date) {
     .replace(/\.\d{3}/, "");
 }
 
-function details(event: EventRecord) {
+function details(event: CalendarItem) {
   return event.description ?? "";
 }
 
-export function googleCalendarUrl(event: EventRecord): string {
+export function googleCalendarUrl(event: CalendarItem): string {
   const { start, end } = startEnd(event);
   const params = new URLSearchParams({
     action: "TEMPLATE",
@@ -36,7 +43,7 @@ export function googleCalendarUrl(event: EventRecord): string {
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
-function outlookUrl(host: string, event: EventRecord): string {
+function outlookUrl(host: string, event: CalendarItem): string {
   const { start, end } = startEnd(event);
   const params = new URLSearchParams({
     path: "/calendar/action/compose",
@@ -51,12 +58,12 @@ function outlookUrl(host: string, event: EventRecord): string {
 }
 
 /** 個人の Microsoft アカウント */
-export function outlookLiveUrl(event: EventRecord): string {
+export function outlookLiveUrl(event: CalendarItem): string {
   return outlookUrl("outlook.live.com", event);
 }
 
 /** 組織アカウント（Office365） */
-export function outlookOffice365Url(event: EventRecord): string {
+export function outlookOffice365Url(event: CalendarItem): string {
   return outlookUrl("outlook.office.com", event);
 }
 
@@ -68,7 +75,7 @@ function escapeIcs(value: string) {
     .replace(/\r?\n/g, "\\n");
 }
 
-export function icsContent(event: EventRecord): string {
+export function icsContent(event: CalendarItem): string {
   const { start, end } = startEnd(event);
   return [
     "BEGIN:VCALENDAR",
@@ -89,7 +96,7 @@ export function icsContent(event: EventRecord): string {
 }
 
 /** ics をその場で生成してダウンロードさせる（サーバー不要） */
-export function downloadIcs(event: EventRecord) {
+export function downloadIcs(event: CalendarItem) {
   const blob = new Blob([icsContent(event)], {
     type: "text/calendar;charset=utf-8",
   });

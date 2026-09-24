@@ -1,15 +1,15 @@
 "use client";
 
 import {
+  type CalendarItem,
   downloadIcs,
   googleCalendarUrl,
   outlookLiveUrl,
   outlookOffice365Url,
 } from "@/lib/calendar";
-import type { EventRecord } from "@/lib/types";
 
-/** 申請済みの人に出す、カレンダー登録の導線 */
-export default function CalendarLinks({ event }: { event: EventRecord }) {
+/** 申請済みの人・決定した会議に出す、カレンダー登録の導線 */
+export default function CalendarLinks({ event }: { event: CalendarItem }) {
   const links = [
     { label: "Outlook（個人アカウント）", href: outlookLiveUrl(event) },
     { label: "Outlook（Office365）", href: outlookOffice365Url(event) },
@@ -52,9 +52,11 @@ export default function CalendarLinks({ event }: { event: EventRecord }) {
         ))}
       </div>
 
-      <p className="text-ink-soft mt-3 text-[11px]">
-        終了時刻は登録されていないため、開始から2時間で登録されます。
-      </p>
+      {event.duration_min === undefined && (
+        <p className="text-ink-soft mt-3 text-[11px]">
+          終了時刻は登録されていないため、開始から2時間で登録されます。
+        </p>
+      )}
     </section>
   );
 }

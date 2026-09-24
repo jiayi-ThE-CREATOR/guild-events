@@ -191,9 +191,14 @@ app/
   events/[id]/page.tsx        02 イベント詳細
   events/[id]/apply/page.tsx  03 参加申請フォーム
   mypage/page.tsx             04 マイページ（申込中 / 参加済み / カレンダー連携）
-  schedule/page.tsx           05 日程調整（空いている時間を探す）
+  schedule/page.tsx           05 日程調整（会議の一覧）
+  schedule/new/page.tsx       06 会議を作成
+  schedule/[id]/page.tsx      07 会議の詳細（候補・参加できない・決定結果）
+  privacy/page.tsx            プライバシーポリシー（Google の本番公開に必要）
   api/calendar/…              カレンダー連携の登録・解除・Google の同意画面の往復
-  api/schedule/…              連携済みメンバー一覧・空き時間の検索
+  api/meetings/…              会議の一覧・作成・詳細・参加できない
+  api/cron/settle-meetings    締切を過ぎた会議を決める（pg_cron から 5 分おき）
+  api/schedule/members        カレンダーをつないでいる人の名前
 components/
   BottomNav.tsx               下部タブ（イベント / マイページ）
   EventCard.tsx               一覧カード
@@ -208,7 +213,8 @@ lib/
   format.ts                   日付整形・location から大学タグを導く
   slots.ts                    空き時間探し（純関数）
   ics.ts                      ICS から埋まっている時間を取り出す（純関数）
-  server/                     サーバー専用（secret key・Google・ICS の取得）
+  meetings.ts                 会議の型・結果発表の選択肢（画面とサーバーで共有）
+  server/                     サーバー専用（secret key・Google・ICS の取得・会議の決定）
 supabase/schema.sql           テーブル / RLS / サンプルデータ
 supabase/migrations/          既に schema.sql を流した DB に後から当てる差分
 tests/                        npm test（node --test）
@@ -216,20 +222,35 @@ tests/                        npm test（node --test）
 
 ## 日程調整（カレンダー連携）
 
-各自のカレンダーを読んで、全員が参加できる会議の時間を探す機能。誰でも使える。
+会議を作ると「募集中」になり、結果発表の時刻に参加者のカレンダーから日時が自動で決まる。
+誰でも会議を作れる。参加者は一度カレンダーをつないでおけば、会議ごとに入力することは何も無い。
 
 - **マイページ** — 「カレンダー連携」でサービスごとのスイッチをオンにする（複数オン可）。
   Google はスイッチを押すと同意画面へ飛ぶ。iPhone は iCloud の公開カレンダーの
-  リンク（`webcal://…`）を貼る。Microsoft は準備中
-- **`/schedule`** — 参加者・期間・長さ・時間帯を選んで探す。
-  全員そろう時間が無ければ、1 人欠け（A-1 人）の時間を出す。それも無ければ「見つからない」
+  リンク（`webcal://…`）を貼る。Microsoft は準備中。オフにしない限りずっと使われる
+- **`/schedule`** — 会議の一覧（募集中／決定済み）。「＋」から `/schedule/new` で作成。
+  会議名・主催者・参加者・長さ・候補の範囲（開始日・日数・時間帯）・結果発表（何時間後か）を選ぶ
+- **`/schedule/[id]`** — 募集中は「今の時点の候補」（開くたびに最新のカレンダーで計算）と、
+  参加者本人用の「参加できない」ボタン。押した人は計算から外れる（A が 1 減る）。
+  決定後は日時とカレンダー登録の導線（`CalendarLinks` を会議の長さで使う）
+
+決め方（`lib/server/meetings.ts` の `settle`）：
+
+- 候補は結果発表より後の時間だけ。全員そろう時間があればその中の一番早い時間、
+  無ければ 1 人欠け（A-1 人）の一番早い時間。それも無ければ「不成立」
+- A は「参加者 − 参加できないを押した人 − カレンダー未連携／読み込めなかった人」。
+  未連携などで外れた人は、結果の下に名前だけ出す
+- 結果発表の時刻を過ぎると、定時ジョブ（5 分おき）が決める。定時ジョブより先に
+  誰かが一覧や会議ページを開いた場合は、その場で決める（二重に決めないよう
+  `status='open'` を条件に更新している）
 
 **予定の中身は誰にも見えない。** Google は「空き時間」と「カレンダー一覧」の scope だけを取り、
 件名や場所は API から最初から返ってこない。iPhone の ICS は件名ごと届くが、サーバーで
-時間だけ取り出して捨てる。検索結果は時間帯と人数だけで、誰が埋まっているかは返さない
-（読み込めなかった人の名前だけは、連携し直してもらうために出す）。
+時間だけ取り出して捨てる。候補や結果は時間帯と人数だけで、誰が埋まっているかは返さない
+（カレンダーをつないでいるか・読み込めたかだけは名前つきで出す）。
 
-token とリンクは `calendar_sources` テーブルに入る。RLS を有効にしてポリシーを 1 つも
+token とリンクは `calendar_sources` テーブルに入る。会議（`meetings` / `meeting_declines`）も
+同じ扱いで、読み書きはすべて `app/api/meetings/` を通る。RLS を有効にしてポリシーを 1 つも
 作っていないので、ブラウザ（anon key）からは読めず、`app/api/` の Route Handler が
 secret key で接続したときだけ触れる。
 
@@ -238,11 +259,11 @@ secret key で接続したときだけ触れる。
 - 終日予定・「予定なし」にした予定・キャンセル済みは埋まっている扱いにしない
 - Google は自分のカレンダーと URL で取り込んだカレンダーだけ数え、他人の購読・祝日は数えない
 - 時刻はすべて日本時間。タイムゾーンの無い ICS の時刻も日本時間とみなす
-- 1 人でもカレンダーを読めなければ検索を止める（その人を無視した結果を出さないため）
 
 ### 有効にする手順（初回だけ）
 
-1. Supabase の SQL Editor で [`supabase/migrations/004_calendar_sources.sql`](supabase/migrations/004_calendar_sources.sql) を実行
+1. Supabase の SQL Editor で [`004_calendar_sources.sql`](supabase/migrations/004_calendar_sources.sql) と
+   [`005_meetings.sql`](supabase/migrations/005_meetings.sql) を実行
 2. Google Cloud Console でプロジェクトを作り、Google Calendar API を有効にする
 3. OAuth 同意画面：User Type は「外部」、scope は `calendar.freebusy` と
    `calendar.calendarlist.readonly`（どちらも非機密なので審査は不要）。
@@ -254,7 +275,39 @@ secret key で接続したときだけ触れる。
    `SUPABASE_SECRET_KEY`（Supabase の Project Settings → API Keys の secret key）、
    `GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET`
 
+6. 会議の自動決定用に `CRON_SECRET`（`openssl rand -hex 32` などで作る長い乱数）を
+   Vercel と `.env.local` に足し、下の「会議の自動決定」の SQL を流す
+
 未設定のあいだは、画面に「カレンダー連携はまだ設定されていません」と出るだけで他の機能は動く。
+
+### 会議の自動決定（定時ジョブ）
+
+Vercel の無料プランの Cron は 1 日 1 回しか動かないので、Supabase の pg_cron から
+5 分おきに `/api/cron/settle-meetings` を叩かせている。`Authorization: Bearer <CRON_SECRET>`
+が一致しないリクエストは何もしない。SQL Editor で一度だけ流す（`<CRON_SECRET>` を置き換える）：
+
+```sql
+create extension if not exists pg_cron with schema pg_catalog;
+create extension if not exists pg_net with schema extensions;
+
+select cron.schedule(
+  'guild-settle-meetings',
+  '*/5 * * * *',
+  $$
+  select net.http_post(
+    url := 'https://guild-events-six.vercel.app/api/cron/settle-meetings',
+    headers := jsonb_build_object('Authorization', 'Bearer <CRON_SECRET>'),
+    body := '{}'::jsonb,
+    timeout_milliseconds := 60000
+  );
+  $$
+);
+```
+
+- 動いているかは `select * from cron.job_run_details order by start_time desc limit 5;`
+  と、`select status_code, content from net._http_response order by created desc limit 5;` で見る
+- `CRON_SECRET` を変えたら、同じ名前で `cron.schedule` をもう一度流せば上書きされる
+- 止めるときは `select cron.unschedule('guild-settle-meetings');`
 
 ## 申請のルール
 
