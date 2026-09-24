@@ -6,7 +6,6 @@ import EventCard from "@/components/EventCard";
 import GuildLogo from "@/components/GuildLogo";
 import { isPast, isSupabaseConfigured, listEvents } from "@/lib/data";
 import { campusOf } from "@/lib/format";
-import { isOrganizer } from "@/lib/members";
 import { useProfile } from "@/lib/profile";
 import type { EventWithCount } from "@/lib/types";
 
@@ -72,28 +71,26 @@ export default function EventListPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {isOrganizer(profile?.name) && (
-            <Link
-              href="/events/new"
-              aria-label="イベントを作成"
-              className="bg-navy hover:bg-ink flex h-9 w-9 items-center justify-center rounded-full text-white transition-colors"
+          <Link
+            href="/events/new"
+            aria-label="イベントを作成"
+            className="bg-navy hover:bg-ink flex h-9 w-9 items-center justify-center rounded-full text-white transition-colors"
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
             >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  d="M12 5v14M5 12h14"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.4"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </Link>
-          )}
+              <path
+                d="M12 5v14M5 12h14"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+              />
+            </svg>
+          </Link>
           {/* PC ではヘッダー右上のアバターと重複するので隠す */}
           <Link
             href="/mypage"

@@ -27,6 +27,7 @@ MVP に加えて入れているもの：
   削除すると `ON DELETE CASCADE` でそのイベントの申請も消える。
   場所は「阪大 / 京大 / オンライン」＋詳細の2段で入力し、`composeLocation` が
   `大阪大学 豊中キャンパス B203` のような文字列に組み立てる（編集時は `parseLocation` で戻す）。
+  **作成は誰でもできる**（内部向けなので絞らない）。編集・削除は
   `lib/members.ts` の `ORGANIZERS` に載っている名前でこの端末に登録されている場合だけ表示される。
   ただし表示制御にすぎず、API を直接叩けば誰でも操作できる。
   `events` に insert / update / delete のポリシーが必要（`migrations/002`, `003`）
