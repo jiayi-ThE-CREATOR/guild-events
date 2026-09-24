@@ -10,6 +10,11 @@ const TABS = [
     match: (p: string) => p === "/" || p.startsWith("/events"),
   },
   {
+    href: "/schedule",
+    label: "日程調整",
+    match: (p: string) => p.startsWith("/schedule"),
+  },
+  {
     href: "/mypage",
     label: "マイページ",
     match: (p: string) => p.startsWith("/mypage"),
@@ -21,7 +26,7 @@ export default function BottomNav() {
 
   return (
     <nav className="border-line fixed inset-x-0 bottom-0 z-20 mx-auto w-full max-w-[430px] border-t bg-white/95 backdrop-blur md:hidden">
-      <ul className="grid grid-cols-2">
+      <ul className="grid grid-cols-3">
         {TABS.map((tab) => {
           const active = tab.match(pathname);
           return (
@@ -35,6 +40,8 @@ export default function BottomNav() {
               >
                 {tab.href === "/" ? (
                   <CalendarIcon filled={active} />
+                ) : tab.href === "/schedule" ? (
+                  <ClockIcon filled={active} />
                 ) : (
                   <PersonIcon filled={active} />
                 )}
@@ -94,6 +101,29 @@ function PersonIcon({ filled }: { filled: boolean }) {
         stroke="currentColor"
         strokeWidth="1.8"
         strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function ClockIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+      <circle
+        cx="12"
+        cy="12"
+        r="8.5"
+        fill={filled ? "currentColor" : "none"}
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <path
+        d="M12 7.5V12l3 2"
+        fill="none"
+        stroke={filled ? "#fff" : "currentColor"}
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </svg>
   );

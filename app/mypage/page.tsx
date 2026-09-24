@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/Badge";
+import CalendarConnections from "@/components/CalendarConnections";
 import NameSelect from "@/components/NameSelect";
 import { cancelApplication, listApplicationsByName } from "@/lib/data";
 import { fullDateTime, shortLocation } from "@/lib/format";
@@ -215,6 +216,10 @@ export default function MyPage() {
           )}
         </div>
       )}
+
+      <div className="mt-8 px-4 md:mt-10 md:px-0">
+        <CalendarConnections member={profile.name} />
+      </div>
     </div>
   );
 }

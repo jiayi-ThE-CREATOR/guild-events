@@ -12,6 +12,11 @@ const NAV = [
     match: (p: string) => p === "/" || p.startsWith("/events"),
   },
   {
+    href: "/schedule",
+    label: "日程調整",
+    match: (p: string) => p.startsWith("/schedule"),
+  },
+  {
     href: "/mypage",
     label: "マイページ",
     match: (p: string) => p.startsWith("/mypage"),
