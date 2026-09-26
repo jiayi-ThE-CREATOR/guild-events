@@ -14,7 +14,7 @@ import { useIsClient } from "@/lib/useIsClient";
 
 /**
  * 会議の詳細。募集中は「今のカレンダーで決めたらどうなるか」の候補と、
- * 参加者本人の「参加できない」ボタンを出す。決定後は日時とカレンダー登録の導線。
+ * 参加者本人の「不参加にする」ボタンを出す。決定後は日時とカレンダー登録の導線。
  */
 
 type Meeting = {
@@ -192,7 +192,7 @@ export default function MeetingPage() {
               <section className="border-line mt-6 rounded-2xl border bg-white p-4">
                 {me.state === "declined" ? (
                   <>
-                    <p className="text-ink text-sm font-bold">「参加できない」で回答しています</p>
+                    <p className="text-ink text-sm font-bold">「不参加」で回答しています</p>
                     <p className="text-ink-soft mt-1 text-xs">この会議の日時の計算には入りません。</p>
                     <button type="button" disabled={saving} onClick={() => setDeclined(false)} className="border-line text-ink mt-3 w-full rounded-xl border py-2.5 text-sm font-semibold disabled:opacity-40">
                       やっぱり参加できる
@@ -223,7 +223,7 @@ export default function MeetingPage() {
                       )}
                     </p>
                     <button type="button" disabled={saving} onClick={() => setDeclined(true)} className="border-line text-ink-soft hover:border-ink-soft mt-3 w-full rounded-xl border py-2.5 text-sm font-semibold transition-colors disabled:opacity-40">
-                      参加できない
+                      不参加にする
                     </button>
                   </>
                 )}
@@ -233,7 +233,7 @@ export default function MeetingPage() {
               <p className="text-ink-soft mt-6 text-xs">
                 参加者の方は{" "}
                 <Link href="/mypage" className="text-navy underline">マイページ</Link>{" "}
-                で名前を選ぶと「参加できない」を押せます。
+                で名前を選ぶと「不参加にする」を押せます。
               </p>
             )}
 
@@ -263,7 +263,7 @@ export default function MeetingPage() {
                 {p.state === "connected" && <Badge tone="navy">連携済み</Badge>}
                 {p.state === "unconnected" && <Badge tone="outline">未連携</Badge>}
                 {p.state === "unreadable" && <Badge tone="amber">読み込めない</Badge>}
-                {p.state === "declined" && <Badge tone="muted">参加できない</Badge>}
+                {p.state === "declined" && <Badge tone="muted">不参加</Badge>}
               </li>
             ))}
           </ul>
@@ -344,7 +344,10 @@ function Excluded({
   );
 }
 
-/** 決定した日時に出られる人・出られない人（理由つき） */
+/**
+ * 決定した日時の出欠。3 列に分ける：
+ * 参加できる（空いている）／参加できない（出たいが出られない。理由つき）／不参加（自分で不参加と回答）
+ */
 function AttendanceLists({
   meeting: m,
   participants,
@@ -353,18 +356,19 @@ function AttendanceLists({
   participants: Detail["participants"];
 }) {
   const attendees = m.attendees ?? [];
-  const reasonOf = (name: string, state: ParticipantState) =>
-    state === "declined"
-      ? "参加できないと回答"
-      : m.excluded.includes(name)
-        ? "カレンダー未連携"
-        : (m.unreadable ?? []).includes(name)
-          ? "カレンダーを読み込めず"
-          : "予定あり";
-  const absent = participants.filter((p) => !attendees.includes(p.name));
+  const reasonOf = (name: string) =>
+    m.excluded.includes(name)
+      ? "カレンダー未連携"
+      : (m.unreadable ?? []).includes(name)
+        ? "カレンダーを読み込めず"
+        : "予定あり";
+  const declined = participants.filter((p) => p.state === "declined").map((p) => p.name);
+  const absent = participants
+    .map((p) => p.name)
+    .filter((name) => !attendees.includes(name) && !declined.includes(name));
 
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
       <div className="border-line rounded-2xl border bg-white p-4">
         <h2 className="text-grass text-sm font-bold">参加できる（{attendees.length}人）</h2>
         <ul className="mt-2 space-y-1.5">
@@ -379,11 +383,23 @@ function AttendanceLists({
           <p className="text-ink-soft mt-2 text-xs">いません</p>
         ) : (
           <ul className="mt-2 space-y-1.5">
-            {absent.map((p) => (
-              <li key={p.name} className="flex items-center justify-between gap-2">
-                <span className="text-ink truncate text-sm">{p.name}</span>
-                <span className="text-ink-soft shrink-0 text-[11px]">{reasonOf(p.name, p.state)}</span>
+            {absent.map((name) => (
+              <li key={name} className="flex items-center justify-between gap-2">
+                <span className="text-ink truncate text-sm">{name}</span>
+                <span className="text-ink-soft shrink-0 text-[11px]">{reasonOf(name)}</span>
               </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <div className="border-line rounded-2xl border bg-white p-4">
+        <h2 className="text-ink-soft text-sm font-bold">不参加（{declined.length}人）</h2>
+        {declined.length === 0 ? (
+          <p className="text-ink-soft mt-2 text-xs">いません</p>
+        ) : (
+          <ul className="mt-2 space-y-1.5">
+            {declined.map((name) => (
+              <li key={name} className="text-ink text-sm">{name}</li>
             ))}
           </ul>
         )}

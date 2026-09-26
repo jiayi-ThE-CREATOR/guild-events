@@ -34,15 +34,17 @@ test("決定：日時・場所・参加できる／できない（理由つき�
       "🗓 9/28（月）20:00〜21:00",
       "📍 オンライン",
       "✅ 参加できる（2人）：a、b",
-      "❌ 参加できない（3人）：c（参加できないと回答）、d（カレンダー未連携）、e（カレンダーを読み込めず）",
+      "❌ 参加できない（2人）：d（カレンダー未連携）、e（カレンダーを読み込めず）",
+      "🙅 不参加（1人）：c",
       "🔗 https://x/schedule/m1",
     ].join("\n"),
   );
 });
 
-test("全員参加なら「参加できない」の行を出さず、場所が無ければ場所の行も出さない", () => {
+test("全員参加なら「参加できない」「不参加」の行を出さず、場所が無ければ場所の行も出さない", () => {
   const m = { ...base, location: null, excluded: [], unreadable: [], attendees: base.participants };
   assert.ok(!meetingMessage(m, [], "u").includes("❌"));
+  assert.ok(!meetingMessage(m, [], "u").includes("🙅"));
   assert.ok(!meetingMessage(m, [], "u").includes("📍"));
 });
 

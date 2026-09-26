@@ -7,8 +7,7 @@ import type { Meeting } from "./meetings";
  * メンションは一切飛ばさない（allowed_mentions を空にする）。
  */
 
-function reasonOf(m: Meeting, name: string, declined: string[]): string {
-  if (declined.includes(name)) return "参加できないと回答";
+function reasonOf(m: Meeting, name: string): string {
   if (m.excluded.includes(name)) return "カレンダー未連携";
   if (m.unreadable.includes(name)) return "カレンダーを読み込めず";
   return "予定あり";
@@ -18,7 +17,9 @@ export function meetingMessage(m: Meeting, declined: string[], url: string): str
   if (m.status === "confirmed" && m.confirmed_start) {
     const end = new Date(Date.parse(m.confirmed_start) + m.duration_min * 60 * 1000).toISOString();
     const attendees = m.attendees ?? [];
-    const absent = m.participants.filter((p) => !attendees.includes(p));
+    const notDeclined = m.participants.filter((p) => !declined.includes(p));
+    const absent = notDeclined.filter((p) => !attendees.includes(p));
+    const declinedHere = m.participants.filter((p) => declined.includes(p));
     return [
       `📅 **${m.title}** の日程が決まりました`,
       `🗓 ${fullDateTime(m.confirmed_start)}〜${timeOnly(end)}`,
@@ -26,8 +27,11 @@ export function meetingMessage(m: Meeting, declined: string[], url: string): str
       `✅ 参加できる（${attendees.length}人）：${attendees.join("、") || "なし"}`,
       absent.length > 0
         ? `❌ 参加できない（${absent.length}人）：${absent
-            .map((p) => `${p}（${reasonOf(m, p, declined)}）`)
+            .map((p) => `${p}（${reasonOf(m, p)}）`)
             .join("、")}`
+        : null,
+      declinedHere.length > 0
+        ? `🙅 不参加（${declinedHere.length}人）：${declinedHere.join("、")}`
         : null,
       `🔗 ${url}`,
     ]

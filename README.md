@@ -193,10 +193,10 @@ app/
   mypage/page.tsx             04 マイページ（申込中 / 参加済み / カレンダー連携）
   schedule/page.tsx           05 日程調整（会議の一覧）
   schedule/new/page.tsx       06 会議を作成
-  schedule/[id]/page.tsx      07 会議の詳細（候補・参加できない・決定結果）
+  schedule/[id]/page.tsx      07 会議の詳細（候補・不参加・決定結果）
   privacy/page.tsx            プライバシーポリシー（Google の本番公開に必要）
   api/calendar/…              カレンダー連携の登録・解除・Google の同意画面の往復
-  api/meetings/…              会議の一覧・作成・詳細・参加できない
+  api/meetings/…              会議の一覧・作成・詳細・不参加
   api/cron/settle-meetings    締切を過ぎた会議を決める（pg_cron から 5 分おき）
   api/schedule/members        カレンダーをつないでいる人の名前
 components/
@@ -231,14 +231,14 @@ tests/                        npm test（node --test）
 - **`/schedule`** — 会議の一覧（募集中／決定済み）。「＋」から `/schedule/new` で作成。
   会議名・主催者・参加者・長さ・候補の範囲（開始日・日数・時間帯）・結果発表（何時間後か）を選ぶ
 - **`/schedule/[id]`** — 募集中は「今の時点の候補」（開くたびに最新のカレンダーで計算）と、
-  参加者本人用の「参加できない」ボタン。押した人は計算から外れる（A が 1 減る）。
+  参加者本人用の「不参加にする」ボタン。押した人は計算から外れる（A が 1 減る）。
   決定後は日時とカレンダー登録の導線（`CalendarLinks` を会議の長さで使う）
 
 決め方（`lib/server/meetings.ts` の `settle`）：
 
 - 候補は結果発表より後の時間だけ。全員そろう時間があればその中の一番早い時間、
   無ければ 1 人欠け（A-1 人）の一番早い時間。それも無ければ「不成立」
-- A は「参加者 − 参加できないを押した人 − カレンダー未連携／読み込めなかった人」。
+- A は「参加者 − 不参加にした人 − カレンダー未連携／読み込めなかった人」。
   未連携などで外れた人は、結果の下に名前だけ出す
 - 決まったら（不成立も）Discord のチャンネルに流す（`lib/server/discord.ts`）。
   チャンネルの Webhook の URL を `DISCORD_WEBHOOK_URL` に入れておく。無ければ流さない。
