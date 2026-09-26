@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { freeMembers } from "../slots";
 import { availability } from "./availability";
 
 export type Meeting = {
@@ -18,7 +19,12 @@ export type Meeting = {
   confirmed_start: string | null;
   confirmed_available: number | null;
   confirmed_total: number | null;
+  /** カレンダー未連携で計算に入らなかった人 */
   excluded: string[];
+  /** カレンダーはつないでいるが読み込めなかった人（権限不足・連携切れなど） */
+  unreadable: string[];
+  /** 決定した時間に予定が空いている人。005 以前に決まった会議は null */
+  attendees: string[] | null;
   created_at: string;
 };
 
@@ -52,8 +58,16 @@ export async function settle(admin: SupabaseClient, meeting: Meeting): Promise<M
 
   const declined = await declinesOf(admin, meeting.id);
   const members = meeting.participants.filter((p) => !declined.includes(p));
-  const { result, excluded } = await availability(admin, members, rangeOf(meeting), Date.now());
+  const { result, unconnected, unreadable, busyByMember } = await availability(
+    admin,
+    members,
+    rangeOf(meeting),
+    Date.now(),
+  );
   const first = result.windows[0];
+  const attendees = first
+    ? freeMembers(busyByMember, first.start, first.start + meeting.duration_min * 60 * 1000)
+    : [];
 
   const { data, error } = await admin
     .from("meetings")
@@ -64,9 +78,11 @@ export async function settle(admin: SupabaseClient, meeting: Meeting): Promise<M
             confirmed_start: new Date(first.start).toISOString(),
             confirmed_available: result.available,
             confirmed_total: result.total,
-            excluded,
+            attendees: meeting.participants.filter((p) => attendees.includes(p)),
+            excluded: unconnected,
+            unreadable,
           }
-        : { status: "failed", confirmed_total: result.total, excluded },
+        : { status: "failed", confirmed_total: result.total, excluded: unconnected, unreadable },
     )
     .eq("id", meeting.id)
     .eq("status", "open")

@@ -8,12 +8,11 @@ import type { Busy } from "../slots";
  * 非機密 scope だけなので Google の審査が要らず、未確認アプリの警告も出ない。
  */
 
-const SCOPES = [
-  "openid",
-  "email",
+const CALENDAR_SCOPES = [
   "https://www.googleapis.com/auth/calendar.freebusy",
   "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
 ];
+const SCOPES = ["openid", "email", ...CALENDAR_SCOPES];
 
 export function googleConfigured(): boolean {
   return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
@@ -45,7 +44,12 @@ async function tokenRequest(body: Record<string, string>) {
   });
   const json = await res.json();
   if (!res.ok) throw new Error(json.error_description ?? json.error ?? "Google token error");
-  return json as { access_token: string; refresh_token?: string; id_token?: string };
+  return json as {
+    access_token: string;
+    refresh_token?: string;
+    id_token?: string;
+    scope?: string;
+  };
 }
 
 /** 認可コードを refresh token とメールアドレスに換える */
@@ -56,6 +60,15 @@ export async function exchangeCode(code: string, redirectUri: string) {
     grant_type: "authorization_code",
   });
   if (!token.refresh_token) throw new Error("refresh token が返ってきませんでした");
+  // 同意画面では権限ごとにチェックを外せる。外されたまま保存すると
+  // 「連携済み」に見えて実はカレンダーが読めない状態になる（実際に起きた）
+  const granted = (token.scope ?? "").split(" ");
+  if (!CALENDAR_SCOPES.every((s) => granted.includes(s))) {
+    await revokeGoogle(token.refresh_token);
+    throw new Error(
+      "カレンダーへのアクセスが許可されていませんでした。もう一度つなぎ、同意画面のチェックをすべてオンにしてください",
+    );
+  }
   // id_token は Google から TLS で直接受け取ったものなので、署名検証は省いて中身だけ読む
   const payload = token.id_token
     ? JSON.parse(Buffer.from(token.id_token.split(".")[1], "base64url").toString())

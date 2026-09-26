@@ -53,6 +53,15 @@ function isFree(busy: Busy[], start: number, end: number): boolean {
   return busy.every((b) => b.end <= start || b.start >= end);
 }
 
+/** その時間に予定が入っていない人の名前 */
+export function freeMembers(
+  busyByMember: Record<string, Busy[]>,
+  start: number,
+  end: number,
+): string[] {
+  return Object.keys(busyByMember).filter((m) => isFree(busyByMember[m], start, end));
+}
+
 export function findSlots(q: SlotQuery): SlotResult {
   const members = Object.keys(q.busyByMember);
   const total = members.length;

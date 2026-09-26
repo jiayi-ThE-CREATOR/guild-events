@@ -35,12 +35,14 @@ type Meeting = {
   confirmed_available: number | null;
   confirmed_total: number | null;
   excluded: string[];
+  unreadable: string[] | null;
+  attendees: string[] | null;
 };
 
 type Detail = {
   meeting: Meeting;
   participants: { name: string; state: ParticipantState }[];
-  preview: { result: SlotResult; excluded: string[] } | null;
+  preview: { result: SlotResult; unconnected: string[]; unreadable: string[] } | null;
 };
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -148,12 +150,13 @@ export default function MeetingPage() {
                 {timeOnly(iso(Date.parse(m.confirmed_start) + m.duration_min * 60 * 1000))}
               </p>
               <p className="text-ink-soft mt-1 text-xs">
-                {m.confirmed_available === m.confirmed_total
-                  ? `全員（${m.confirmed_total}人）が参加できます`
-                  : `${m.confirmed_total}人中 ${m.confirmed_available}人が参加できます（1人は予定あり）`}
+                {m.attendees
+                  ? `参加者 ${participants.length}人中 ${m.attendees.length}人が参加できます`
+                  : `参加者 ${participants.length}人中 ${m.confirmed_available}人が参加できます`}
               </p>
             </div>
-            <Excluded names={m.excluded} settled />
+            {m.attendees && <AttendanceLists meeting={m} participants={participants} />}
+            {!m.attendees && <Excluded names={m.excluded} settled />}
             <CalendarLinks
               event={{
                 id: m.id,
@@ -179,6 +182,7 @@ export default function MeetingPage() {
               </Link>
             </p>
             <Excluded names={m.excluded} settled />
+            <Excluded names={m.unreadable ?? []} settled unreadable />
           </section>
         )}
 
@@ -199,11 +203,18 @@ export default function MeetingPage() {
                     <p className="text-ink text-sm font-bold">
                       {me.state === "connected"
                         ? "あなたのカレンダーから空き時間を読んでいます"
-                        : "カレンダーがまだつながっていません"}
+                        : me.state === "unreadable"
+                          ? "あなたのカレンダーを読み込めていません"
+                          : "カレンダーがまだつながっていません"}
                     </p>
                     <p className="text-ink-soft mt-1 text-xs">
                       {me.state === "connected" ? (
                         "何もしなくて大丈夫です。どの日時でも出られない場合だけ下を押してください。"
+                      ) : me.state === "unreadable" ? (
+                        <>
+                          <Link href="/mypage" className="text-navy underline">マイページ</Link>
+                          で一度オフにしてからつなぎ直してください（Google は同意画面のチェックをすべてオンに）。
+                        </>
                       ) : (
                         <>
                           <Link href="/mypage" className="text-navy underline">マイページ</Link>
@@ -234,12 +245,15 @@ export default function MeetingPage() {
                   もう一度計算し、一番早い時間に決まります。
                 </p>
                 <Preview result={preview.result} durationMin={m.duration_min} />
-                <Excluded names={preview.excluded} />
+                <Excluded names={preview.unconnected} />
+                <Excluded names={preview.unreadable} unreadable />
               </section>
             )}
           </>
         )}
 
+        {/* 決定後は「参加できる／できない」の 2 列が参加者一覧を兼ねる */}
+        {!(m.status === "confirmed" && m.attendees) && (
         <section className="mt-8">
           <h2 className="text-ink mb-3 text-sm font-bold md:text-base">参加者（{participants.length}人）</h2>
           <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
@@ -248,11 +262,13 @@ export default function MeetingPage() {
                 <span className="text-ink truncate text-sm">{p.name}</span>
                 {p.state === "connected" && <Badge tone="navy">連携済み</Badge>}
                 {p.state === "unconnected" && <Badge tone="outline">未連携</Badge>}
+                {p.state === "unreadable" && <Badge tone="amber">読み込めない</Badge>}
                 {p.state === "declined" && <Badge tone="muted">参加できない</Badge>}
               </li>
             ))}
           </ul>
         </section>
+        )}
       </div>
     </div>
   );
@@ -307,12 +323,71 @@ function Preview({ result, durationMin }: { result: SlotResult; durationMin: num
   );
 }
 
-function Excluded({ names, settled }: { names: string[]; settled?: boolean }) {
+function Excluded({
+  names,
+  settled,
+  unreadable,
+}: {
+  names: string[];
+  settled?: boolean;
+  unreadable?: boolean;
+}) {
   if (names.length === 0) return null;
   return (
     <p className="text-ink-soft mt-3 text-[11px]">
-      {names.join("、")} さんはカレンダーがつながっていない（または読み込めなかった）ため、
+      {names.join("、")} さんは
+      {unreadable
+        ? "カレンダーをつないでいますが読み込めなかった（権限が足りない・連携が切れた等）ため、"
+        : "カレンダーがつながっていないため、"}
       {settled ? "計算に入っていません。" : "今は計算に入っていません。"}
     </p>
+  );
+}
+
+/** 決定した日時に出られる人・出られない人（理由つき） */
+function AttendanceLists({
+  meeting: m,
+  participants,
+}: {
+  meeting: Meeting;
+  participants: Detail["participants"];
+}) {
+  const attendees = m.attendees ?? [];
+  const reasonOf = (name: string, state: ParticipantState) =>
+    state === "declined"
+      ? "参加できないと回答"
+      : m.excluded.includes(name)
+        ? "カレンダー未連携"
+        : (m.unreadable ?? []).includes(name)
+          ? "カレンダーを読み込めず"
+          : "予定あり";
+  const absent = participants.filter((p) => !attendees.includes(p.name));
+
+  return (
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+      <div className="border-line rounded-2xl border bg-white p-4">
+        <h2 className="text-grass text-sm font-bold">参加できる（{attendees.length}人）</h2>
+        <ul className="mt-2 space-y-1.5">
+          {attendees.map((name) => (
+            <li key={name} className="text-ink text-sm">{name}</li>
+          ))}
+        </ul>
+      </div>
+      <div className="border-line rounded-2xl border bg-white p-4">
+        <h2 className="text-ink-soft text-sm font-bold">参加できない（{absent.length}人）</h2>
+        {absent.length === 0 ? (
+          <p className="text-ink-soft mt-2 text-xs">いません</p>
+        ) : (
+          <ul className="mt-2 space-y-1.5">
+            {absent.map((p) => (
+              <li key={p.name} className="flex items-center justify-between gap-2">
+                <span className="text-ink truncate text-sm">{p.name}</span>
+                <span className="text-ink-soft shrink-0 text-[11px]">{reasonOf(p.name, p.state)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
   );
 }

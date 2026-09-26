@@ -17,7 +17,7 @@ export type MeetingSummary = {
   created_at: string;
 };
 
-export type ParticipantState = "connected" | "unconnected" | "declined";
+export type ParticipantState = "connected" | "unconnected" | "unreadable" | "declined";
 
 export function durationLabel(min: number): string {
   return min < 60 ? `${min}分` : min % 60 === 0 ? `${min / 60}時間` : `${Math.floor(min / 60)}時間${min % 60}分`;

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { findSlots, jstMidnight, type Busy } from "../lib/slots.ts";
+import { findSlots, freeMembers, jstMidnight, type Busy } from "../lib/slots.ts";
 
 const H = 60 * 60 * 1000;
 /** 2026-09-28（月）の日本時間 h 時 */
@@ -90,4 +90,14 @@ test("notBefore より前に始まる枠は出さない", () => {
     busyByMember: { a: [] },
   });
   assert.deepEqual(r.windows, [{ start: at(16), end: at(18) }]);
+});
+
+test("freeMembers はその時間に予定が無い人だけを返す（境界は重ならない扱い）", () => {
+  const members = {
+    a: [busy(9, 10)],
+    b: [busy(10, 11)],
+    c: [busy(10.5, 12)],
+  };
+  assert.deepEqual(freeMembers(members, at(10), at(11)).sort(), ["a"]);
+  assert.deepEqual(freeMembers(members, at(11), at(12)).sort(), ["a", "b"]);
 });

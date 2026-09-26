@@ -13,14 +13,20 @@ export type SearchRange = {
 
 /**
  * 指定した人たちのカレンダーを読み、会議を入れられる時間を探す。
- * カレンダー未連携・読み込み失敗の人は計算から外し、excluded で名前だけ返す。
+ * カレンダー未連携（unconnected）・読み込み失敗（unreadable）の人は計算から外し、
+ * 名前だけ返す。決定した時間に誰が出られるかを出すため、読めた人の予定も返す。
  */
 export async function availability(
   admin: SupabaseClient,
   members: string[],
   range: SearchRange,
   notBefore: number,
-): Promise<{ result: SlotResult; excluded: string[] }> {
+): Promise<{
+  result: SlotResult;
+  unconnected: string[];
+  unreadable: string[];
+  busyByMember: Record<string, Busy[]>;
+}> {
   const { data, error } = await admin
     .from("calendar_sources")
     .select("id, member_name, provider, label, secret")
@@ -31,22 +37,29 @@ export async function availability(
   const to = from + range.days * 24 * 60 * 60 * 1000;
 
   const busyByMember: Record<string, Busy[]> = {};
-  const excluded: string[] = [];
+  const unconnected: string[] = [];
+  const unreadable: string[] = [];
   await Promise.all(
     members.map(async (name) => {
       const sources = (data as CalendarSource[]).filter((s) => s.member_name === name);
-      if (sources.length === 0) return excluded.push(name);
+      if (sources.length === 0) return unconnected.push(name);
       try {
         busyByMember[name] = await memberBusy(sources, from, to);
       } catch (e) {
         console.error(`[availability] ${name}: ${(e as Error).message}`);
-        excluded.push(name);
+        unreadable.push(name);
       }
     }),
   );
 
   const result = findSlots({ busyByMember, ...range, notBefore });
-  return { result, excluded: members.filter((m) => excluded.includes(m)) };
+  // 名前の並びは参加者の並びにそろえる（Promise.all の完了順にしない）
+  return {
+    result,
+    unconnected: members.filter((m) => unconnected.includes(m)),
+    unreadable: members.filter((m) => unreadable.includes(m)),
+    busyByMember,
+  };
 }
 
 /** カレンダーを 1 つ以上つないでいる人の名前 */

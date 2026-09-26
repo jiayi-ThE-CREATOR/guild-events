@@ -29,21 +29,30 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     declinesOf(admin, id),
     connectedMembers(admin),
   ]);
-  const participants = meeting.participants.map((name) => ({
-    name,
-    state: declined.includes(name) ? "declined" : connected.has(name) ? "connected" : "unconnected",
-  }));
-
   let preview = null;
   if (meeting.status === "open") {
     const members = meeting.participants.filter((p) => !declined.includes(p));
-    preview = await availability(
+    const { result, unconnected, unreadable } = await availability(
       admin,
       members,
       rangeOf(meeting),
       Math.max(Date.now(), Date.parse(meeting.deadline)),
     );
+    preview = { result, unconnected, unreadable };
   }
+
+  // 募集中は今読めるか、決定後は決めたときに読めたかで「読み込めない」を出す
+  const unreadable = preview ? preview.unreadable : (meeting.unreadable ?? []);
+  const participants = meeting.participants.map((name) => ({
+    name,
+    state: declined.includes(name)
+      ? "declined"
+      : unreadable.includes(name)
+        ? "unreadable"
+        : connected.has(name)
+          ? "connected"
+          : "unconnected",
+  }));
 
   return Response.json({ meeting, participants, preview });
 }
