@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { freeMembers } from "../slots";
 import { availability } from "./availability";
+import { notifyDiscord } from "./discord";
 
 export type Meeting = {
   id: string;
@@ -52,8 +53,13 @@ export async function declinesOf(admin: SupabaseClient, meetingId: string): Prom
  * 候補が無ければ不成立にする。
  * 定時ジョブと画面を開いたときの両方から呼ばれるので、status='open' を条件に
  * 更新して、同じ会議を二重に決めないようにしている。
+ * 決めた呼び出しだけが Discord に流す（origin はメッセージに載せるリンク用）。
  */
-export async function settle(admin: SupabaseClient, meeting: Meeting): Promise<Meeting> {
+export async function settle(
+  admin: SupabaseClient,
+  meeting: Meeting,
+  origin: string,
+): Promise<Meeting> {
   if (meeting.status !== "open" || Date.parse(meeting.deadline) > Date.now()) return meeting;
 
   const declined = await declinesOf(admin, meeting.id);
@@ -94,11 +100,12 @@ export async function settle(admin: SupabaseClient, meeting: Meeting): Promise<M
     const { data: fresh } = await admin.from("meetings").select().eq("id", meeting.id).single();
     return fresh as Meeting;
   }
+  await notifyDiscord(data as Meeting, declined, origin);
   return data as Meeting;
 }
 
 /** 締切を過ぎた募集中の会議をまとめて決める（定時ジョブ用） */
-export async function settleDue(admin: SupabaseClient): Promise<number> {
+export async function settleDue(admin: SupabaseClient, origin: string): Promise<number> {
   const { data, error } = await admin
     .from("meetings")
     .select()
@@ -107,7 +114,7 @@ export async function settleDue(admin: SupabaseClient): Promise<number> {
   if (error) throw new Error(error.message);
   for (const m of (data ?? []) as Meeting[]) {
     try {
-      await settle(admin, m);
+      await settle(admin, m, origin);
     } catch (e) {
       console.error(`[meetings] ${m.id} の決定に失敗: ${(e as Error).message}`);
     }

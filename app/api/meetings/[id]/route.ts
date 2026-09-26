@@ -9,7 +9,7 @@ import { declinesOf, rangeOf, settle, type Meeting } from "@/lib/server/meetings
  * 候補は結果発表より後の時間だけ（発表前の時間に決まることは無いので）。
  * 誰がいつ埋まっているかは返さない。
  */
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const admin = getAdmin();
   if (!admin) return Response.json({ error: NOT_CONFIGURED }, { status: 503 });
   const { id } = await params;
@@ -20,7 +20,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   let meeting: Meeting;
   try {
-    meeting = await settle(admin, data as Meeting);
+    meeting = await settle(admin, data as Meeting, req.nextUrl.origin);
   } catch (e) {
     return Response.json({ error: (e as Error).message }, { status: 500 });
   }

@@ -8,11 +8,11 @@ const LIST_FIELDS =
   "id, title, organizer, participants, duration_min, deadline, status, confirmed_start, created_at";
 
 /** 会議の一覧。締切を過ぎたものは返す前に決めておく（定時ジョブより先に開かれた場合） */
-export async function GET() {
+export async function GET(req: NextRequest) {
   const admin = getAdmin();
   if (!admin) return Response.json({ error: NOT_CONFIGURED }, { status: 503 });
   try {
-    await settleDue(admin);
+    await settleDue(admin, req.nextUrl.origin);
   } catch (e) {
     console.error(`[meetings] ${(e as Error).message}`);
   }

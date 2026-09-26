@@ -14,7 +14,7 @@ async function run(req: NextRequest) {
   }
   const admin = getAdmin();
   if (!admin) return Response.json({ error: NOT_CONFIGURED }, { status: 503 });
-  const settled = await settleDue(admin);
+  const settled = await settleDue(admin, req.nextUrl.origin);
   return Response.json({ settled });
 }
 
