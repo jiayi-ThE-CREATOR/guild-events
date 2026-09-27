@@ -1,8 +1,9 @@
 import { fullDateTime, timeOnly } from "../format.ts";
+import { durationLabel } from "../meetings.ts";
 import type { Meeting } from "./meetings";
 
 /**
- * 会議が決まったら Discord のチャンネルに流す（Webhook）。
+ * 会議の募集開始と決定を Discord のチャンネルに流す（Webhook）。
  * DISCORD_WEBHOOK_URL が無ければ何もしない。失敗しても決定そのものは止めない。
  * メンションは一切飛ばさない（allowed_mentions を空にする）。
  */
@@ -45,21 +46,54 @@ export function meetingMessage(m: Meeting, declined: string[], url: string): str
   ].join("\n");
 }
 
-export async function notifyDiscord(m: Meeting, declined: string[], origin: string) {
+function rangeLabel(m: Meeting): string {
+  const [y, mo, d] = m.from_date.split("-").map(Number);
+  const start = new Date(Date.UTC(y, mo - 1, d));
+  const end = new Date(start.getTime() + (m.days - 1) * 24 * 60 * 60 * 1000);
+  const md = (x: Date) => `${x.getUTCMonth() + 1}/${x.getUTCDate()}`;
+  return `${md(start)}〜${md(end)}・${m.day_start_min / 60}時〜${m.day_end_min / 60}時`;
+}
+
+/** 募集開始。カレンダー未連携の参加者は名前を挙げて、結果発表までにつないでもらう */
+export function openingMessage(m: Meeting, unconnected: string[], url: string): string {
+  return [
+    `📣 **${m.title}** の日程調整を始めました`,
+    `👤 主催：${m.organizer}`,
+    `⏱ 長さ：${durationLabel(m.duration_min)}`,
+    `🗓 候補：${rangeLabel(m)}`,
+    m.location ? `📍 ${m.location}` : null,
+    `⏰ 結果発表：${fullDateTime(m.deadline)}`,
+    `👥 参加者（${m.participants.length}人）：${m.participants.join("、")}`,
+    unconnected.length > 0
+      ? `⚠️ カレンダー未連携：${unconnected.join("、")}（結果発表までにマイページでつないでください。つながないと計算に入りません）`
+      : null,
+    "出られない人は、会議ページで「不参加にする」を押してください",
+    `🔗 ${url}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+async function post(content: string) {
   const webhook = process.env.DISCORD_WEBHOOK_URL;
   if (!webhook) return;
   try {
     const res = await fetch(webhook, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        content: meetingMessage(m, declined, `${origin}/schedule/${m.id}`).slice(0, 2000),
-        allowed_mentions: { parse: [] },
-      }),
+      body: JSON.stringify({ content: content.slice(0, 2000), allowed_mentions: { parse: [] } }),
       signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) console.error(`[discord] 投稿に失敗（${res.status}）: ${await res.text()}`);
   } catch (e) {
     console.error(`[discord] 投稿に失敗: ${(e as Error).message}`);
   }
+}
+
+export async function notifyDiscord(m: Meeting, declined: string[], origin: string) {
+  await post(meetingMessage(m, declined, `${origin}/schedule/${m.id}`));
+}
+
+export async function notifyOpened(m: Meeting, unconnected: string[], origin: string) {
+  await post(openingMessage(m, unconnected, `${origin}/schedule/${m.id}`));
 }

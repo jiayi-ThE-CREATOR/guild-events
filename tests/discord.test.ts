@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { meetingMessage } from "../lib/server/discord.ts";
+import { meetingMessage, openingMessage } from "../lib/server/discord.ts";
 import type { Meeting } from "../lib/server/meetings.ts";
 
 const base: Meeting = {
@@ -56,4 +56,28 @@ test("予定ありの人は「予定あり」", () => {
 test("不成立", () => {
   const m = { ...base, status: "failed" as const, confirmed_start: null };
   assert.match(meetingMessage(m, [], "u"), /^⚠️ \*\*【ラクハン】定例\*\* は、候補の範囲の中に/);
+});
+
+test("募集開始：主催・長さ・候補・結果発表・参加者・未連携の人・リンク", () => {
+  const m = { ...base, status: "open" as const, confirmed_start: null, attendees: null };
+  assert.equal(
+    openingMessage(m, ["d"], "https://x/schedule/m1"),
+    [
+      "📣 **【ラクハン】定例** の日程調整を始めました",
+      "👤 主催：a",
+      "⏱ 長さ：1時間",
+      "🗓 候補：9/28〜10/1・9時〜24時",
+      "📍 オンライン",
+      "⏰ 結果発表：9/26（土）11:41",
+      "👥 参加者（5人）：a、b、c、d、e",
+      "⚠️ カレンダー未連携：d（結果発表までにマイページでつないでください。つながないと計算に入りません）",
+      "出られない人は、会議ページで「不参加にする」を押してください",
+      "🔗 https://x/schedule/m1",
+    ].join("\n"),
+  );
+});
+
+test("募集開始：全員連携済みなら未連携の行を出さない", () => {
+  const m = { ...base, status: "open" as const };
+  assert.ok(!openingMessage(m, [], "u").includes("⚠️"));
 });
