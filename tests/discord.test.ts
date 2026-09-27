@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { meetingMessage, openingMessage } from "../lib/server/discord.ts";
+import { meetingMessage, openingMessage, rsvpMessage } from "../lib/server/discord.ts";
 import type { Meeting } from "../lib/server/meetings.ts";
 
 const base: Meeting = {
@@ -80,4 +80,12 @@ test("募集開始：主催・長さ・候補・結果発表・参加者・未�
 test("募集開始：全員連携済みなら未連携の行を出さない", () => {
   const m = { ...base, status: "open" as const };
   assert.ok(!openingMessage(m, [], "u").includes("⚠️"));
+});
+
+test("あとから参加する／やめる", () => {
+  assert.equal(
+    rsvpMessage(base, "z", true, 3, "u"),
+    ["🙋 **z** さんが参加します｜【ラクハン】定例（9/28（月）20:00〜）", "参加 3人", "🔗 u"].join("\n"),
+  );
+  assert.match(rsvpMessage(base, "a", false, 1, "u"), /^🙅 \*\*a\*\* さんが参加をやめました/);
 });

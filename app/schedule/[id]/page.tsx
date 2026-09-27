@@ -45,6 +45,7 @@ type Detail = {
   meeting: Meeting;
   participants: { name: string; state: ParticipantState }[];
   preview: { result: SlotResult; unconnected: string[]; unreadable: string[] } | null;
+  rsvpOpen: boolean;
 };
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -81,6 +82,25 @@ export default function MeetingPage() {
       alive = false;
     };
   }, [fetchDetail]);
+
+  async function setAttending(attending: boolean) {
+    if (!profile || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/meetings/${id}/rsvp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ member: profile.name, attending }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      setDetail(await fetchDetail());
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function setDeclined(declined: boolean) {
     if (!profile || saving) return;
@@ -157,6 +177,14 @@ export default function MeetingPage() {
                   : `参加者 ${participants.length}人中 ${m.confirmed_available}人が参加できます`}
               </p>
             </div>
+            {isClient && m.attendees && detail.rsvpOpen && (
+              <RsvpCard
+                meeting={m}
+                member={profile?.name ?? null}
+                saving={saving}
+                onChange={setAttending}
+              />
+            )}
             {m.attendees && <AttendanceLists meeting={m} participants={participants} />}
             {!m.attendees && <Excluded names={m.excluded} settled />}
             <CalendarLinks
@@ -500,5 +528,54 @@ function MeetingEntry({
         />
       )}
     </details>
+  );
+}
+
+/** 決まった会議への参加登録。参加者に選ばれていなかった人も押せる。会議が終わるまで */
+function RsvpCard({
+  meeting: m,
+  member,
+  saving,
+  onChange,
+}: {
+  meeting: Meeting;
+  member: string | null;
+  saving: boolean;
+  onChange: (attending: boolean) => void;
+}) {
+  if (!member) {
+    return (
+      <p className="text-ink-soft text-xs">
+        <Link href="/mypage" className="text-navy underline">マイページ</Link>
+        で名前を選ぶと、この会議に参加登録できます。
+      </p>
+    );
+  }
+  const attending = (m.attendees ?? []).includes(member);
+  return (
+    <section className="border-line flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-white p-4">
+      <p className="text-ink text-sm font-bold">
+        {attending ? "あなたは参加予定です" : "この会議に参加しますか？"}
+      </p>
+      {attending ? (
+        <button
+          type="button"
+          disabled={saving}
+          onClick={() => onChange(false)}
+          className="border-line text-ink-soft rounded-xl border px-5 py-2.5 text-sm font-semibold disabled:opacity-40"
+        >
+          参加をやめる
+        </button>
+      ) : (
+        <button
+          type="button"
+          disabled={saving}
+          onClick={() => onChange(true)}
+          className="bg-grass rounded-xl px-5 py-2.5 text-sm font-bold text-white disabled:opacity-40"
+        >
+          参加する
+        </button>
+      )}
+    </section>
   );
 }

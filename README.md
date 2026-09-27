@@ -199,6 +199,7 @@ app/
   api/meetings/…              会議の一覧・作成・詳細・不参加
   api/cron/settle-meetings    締切を過ぎた会議を決める（pg_cron から 5 分おき）
   api/meetings/[id]/entry     この会議の予定（手動）の読み書き
+  api/meetings/[id]/rsvp      決まった会議への参加登録
   api/weekly                  毎週の予定（手動）の読み書き
   api/schedule/members        予定を登録済み（カレンダーか毎週の予定）の人の名前
 components/
@@ -240,7 +241,9 @@ tests/                        npm test（node --test）
 - **`/schedule/[id]`** — 募集中は「今の時点の候補」（開くたびに最新のカレンダーで計算）と、
   参加者本人用の「不参加にする」ボタンと「この会議の予定を手動で入れる」（候補の範囲だけを塗る。
   下の層での見え方を薄く重ねて出す）。「不参加にする」を押した人は計算から外れる（A が 1 減る）。
-  決定後は日時とカレンダー登録の導線（`CalendarLinks` を会議の長さで使う）
+  決定後は日時とカレンダー登録の導線、「参加する／参加をやめる」（メンバーなら参加者に選ばれていなくても
+  押せる。会議が終わるまで。`meeting_rsvps` に 1 人 1 行で記録し、決定時の出欠に上書きして表示。
+  出欠が変わったら Discord に短く流す）（`CalendarLinks` を会議の長さで使う）
 
 決め方（`lib/server/meetings.ts` の `settle`）：
 
@@ -278,7 +281,7 @@ secret key で接続したときだけ触れる。
 
 ### 有効にする手順（初回だけ）
 
-1. Supabase の SQL Editor で `supabase/migrations/` の 004〜007 を番号順に実行
+1. Supabase の SQL Editor で `supabase/migrations/` の 004〜008 を番号順に実行
 2. Google Cloud Console でプロジェクトを作り、Google Calendar API を有効にする
 3. OAuth 同意画面：User Type は「外部」、scope は `calendar.freebusy` と
    `calendar.calendarlist.readonly`（どちらも非機密なので審査は不要）。

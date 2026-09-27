@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Rsvp } from "../rsvp";
 import { freeMembers } from "../slots";
 import { availability } from "./availability";
 import { notifyDiscord } from "./discord";
@@ -46,6 +47,16 @@ export async function declinesOf(admin: SupabaseClient, meetingId: string): Prom
     .eq("meeting_id", meetingId);
   if (error) throw new Error(error.message);
   return (data ?? []).map((r) => r.member_name as string);
+}
+
+export async function rsvpsOf(admin: SupabaseClient, meetingId: string): Promise<Rsvp[]> {
+  const { data, error } = await admin
+    .from("meeting_rsvps")
+    .select("member_name, attending")
+    .eq("meeting_id", meetingId)
+    .order("updated_at");
+  if (error) throw new Error(error.message);
+  return (data ?? []) as Rsvp[];
 }
 
 /**

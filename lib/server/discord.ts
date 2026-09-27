@@ -74,6 +74,24 @@ export function openingMessage(m: Meeting, unconnected: string[], url: string): 
     .join("\n");
 }
 
+/** 決まった会議にあとから参加する／やめたとき */
+export function rsvpMessage(
+  m: Meeting,
+  member: string,
+  attending: boolean,
+  attendeeCount: number,
+  url: string,
+): string {
+  const when = m.confirmed_start ? `（${fullDateTime(m.confirmed_start)}〜）` : "";
+  return [
+    attending
+      ? `🙋 **${member}** さんが参加します｜${m.title}${when}`
+      : `🙅 **${member}** さんが参加をやめました｜${m.title}${when}`,
+    `参加 ${attendeeCount}人`,
+    `🔗 ${url}`,
+  ].join("\n");
+}
+
 async function post(content: string) {
   const webhook = process.env.DISCORD_WEBHOOK_URL;
   if (!webhook) return;
@@ -92,6 +110,16 @@ async function post(content: string) {
 
 export async function notifyDiscord(m: Meeting, declined: string[], origin: string) {
   await post(meetingMessage(m, declined, `${origin}/schedule/${m.id}`));
+}
+
+export async function notifyRsvp(
+  m: Meeting,
+  member: string,
+  attending: boolean,
+  attendeeCount: number,
+  origin: string,
+) {
+  await post(rsvpMessage(m, member, attending, attendeeCount, `${origin}/schedule/${m.id}`));
 }
 
 export async function notifyOpened(m: Meeting, unconnected: string[], origin: string) {
