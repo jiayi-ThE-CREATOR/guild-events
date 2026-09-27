@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { MEETING_DEADLINE_HOURS } from "@/lib/meetings";
 import { isMember } from "@/lib/members";
 import { getAdmin, NOT_CONFIGURED } from "@/lib/server/admin";
-import { connectedMembers } from "@/lib/server/availability";
+import { registeredMembers } from "@/lib/server/availability";
 import { notifyOpened } from "@/lib/server/discord";
 import { settleDue, type Meeting } from "@/lib/server/meetings";
 
@@ -93,8 +93,8 @@ export async function POST(req: NextRequest) {
 
   // 募集開始を Discord に流す。失敗しても作成そのものは成功として返す
   try {
-    const connected = await connectedMembers(admin);
-    const unconnected = meeting.participants.filter((p) => !connected.has(p));
+    const registered = await registeredMembers(admin);
+    const unconnected = meeting.participants.filter((p) => !registered.has(p));
     await notifyOpened(meeting, unconnected, req.nextUrl.origin);
   } catch (e) {
     console.error(`[meetings] 募集開始の通知に失敗: ${(e as Error).message}`);

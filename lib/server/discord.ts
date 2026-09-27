@@ -9,7 +9,7 @@ import type { Meeting } from "./meetings";
  */
 
 function reasonOf(m: Meeting, name: string): string {
-  if (m.excluded.includes(name)) return "カレンダー未連携";
+  if (m.excluded.includes(name)) return "予定未登録";
   if (m.unreadable.includes(name)) return "カレンダーを読み込めず";
   return "予定あり";
 }
@@ -54,7 +54,7 @@ function rangeLabel(m: Meeting): string {
   return `${md(start)}〜${md(end)}・${m.day_start_min / 60}時〜${m.day_end_min / 60}時`;
 }
 
-/** 募集開始。カレンダー未連携の参加者は名前を挙げて、結果発表までにつないでもらう */
+/** 募集開始。予定未登録の参加者は名前を挙げて、結果発表までに登録してもらう */
 export function openingMessage(m: Meeting, unconnected: string[], url: string): string {
   return [
     `📣 **${m.title}** の日程調整を始めました`,
@@ -65,7 +65,7 @@ export function openingMessage(m: Meeting, unconnected: string[], url: string): 
     `⏰ 結果発表：${fullDateTime(m.deadline)}`,
     `👥 参加者（${m.participants.length}人）：${m.participants.join("、")}`,
     unconnected.length > 0
-      ? `⚠️ カレンダー未連携：${unconnected.join("、")}（結果発表までにマイページでつないでください。つながないと計算に入りません）`
+      ? `⚠️ 予定未登録：${unconnected.join("、")}（結果発表までに、マイページでカレンダーをつなぐか毎週の予定を入れる、または会議ページで予定を塗ってください。登録が無いと計算に入りません）`
       : null,
     "出られない人は、会議ページで「不参加にする」を押してください",
     `🔗 ${url}`,

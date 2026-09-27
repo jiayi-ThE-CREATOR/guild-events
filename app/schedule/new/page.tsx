@@ -149,7 +149,7 @@ function MeetingForm() {
                   />
                   <span className="truncate">{name}</span>
                   {unconnected && (
-                    <span className="text-ink-soft ml-auto shrink-0 text-[10px]">未連携</span>
+                    <span className="text-ink-soft ml-auto shrink-0 text-[10px]">未登録</span>
                   )}
                 </label>
               </li>
@@ -157,7 +157,7 @@ function MeetingForm() {
           })}
         </ul>
         <p className="text-ink-soft mt-1.5 text-[11px]">
-          「未連携」の人は、結果発表までにマイページでカレンダーをつながないと計算に入りません。
+          「未登録」の人は、結果発表までにカレンダーをつなぐか予定を手動で入れないと計算に入りません。
         </p>
       </fieldset>
 

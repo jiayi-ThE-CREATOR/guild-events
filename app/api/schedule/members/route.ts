@@ -1,11 +1,13 @@
 import { getAdmin, NOT_CONFIGURED } from "@/lib/server/admin";
+import { registeredMembers } from "@/lib/server/availability";
 
-/** カレンダーを 1 つ以上つないでいる人の名前（日程調整の参加者候補） */
+/** 予定を登録済み（外部カレンダーか毎週の予定がある）の人の名前。会議作成画面の目安用 */
 export async function GET() {
   const admin = getAdmin();
   if (!admin) return Response.json({ error: NOT_CONFIGURED }, { status: 503 });
-  const { data, error } = await admin.from("calendar_sources").select("member_name");
-  if (error) return Response.json({ error: error.message }, { status: 500 });
-  const names = [...new Set((data ?? []).map((r) => r.member_name as string))];
-  return Response.json({ members: names });
+  try {
+    return Response.json({ members: [...(await registeredMembers(admin))] });
+  } catch (e) {
+    return Response.json({ error: (e as Error).message }, { status: 500 });
+  }
 }

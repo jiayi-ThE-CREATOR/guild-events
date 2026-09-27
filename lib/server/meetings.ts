@@ -20,7 +20,7 @@ export type Meeting = {
   confirmed_start: string | null;
   confirmed_available: number | null;
   confirmed_total: number | null;
-  /** カレンダー未連携で計算に入らなかった人 */
+  /** 予定未登録（外部カレンダーも手動の予定も無い）で計算に入らなかった人 */
   excluded: string[];
   /** カレンダーはつないでいるが読み込めなかった人（権限不足・連携切れなど） */
   unreadable: string[];
@@ -69,6 +69,7 @@ export async function settle(
     members,
     rangeOf(meeting),
     Date.now(),
+    meeting.id,
   );
   const first = result.windows[0];
   const attendees = first

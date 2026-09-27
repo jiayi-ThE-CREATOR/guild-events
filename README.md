@@ -198,13 +198,17 @@ app/
   api/calendar/…              カレンダー連携の登録・解除・Google の同意画面の往復
   api/meetings/…              会議の一覧・作成・詳細・不参加
   api/cron/settle-meetings    締切を過ぎた会議を決める（pg_cron から 5 分おき）
-  api/schedule/members        カレンダーをつないでいる人の名前
+  api/meetings/[id]/entry     この会議の予定（手動）の読み書き
+  api/weekly                  毎週の予定（手動）の読み書き
+  api/schedule/members        予定を登録済み（カレンダーか毎週の予定）の人の名前
 components/
   BottomNav.tsx               下部タブ（イベント / マイページ）
   EventCard.tsx               一覧カード
   Badge.tsx                   大学・受付状況のバッジ
   PageHeader.tsx              「← タイトル」ヘッダー
   CalendarConnections.tsx     マイページのカレンダー連携スイッチ
+  ScheduleEditor.tsx          30 分のマスを塗る画面（毎週の予定・この会議の予定で共用）
+  WeeklySchedule.tsx          マイページの毎週の予定
 lib/
   data.ts                     DB を触る唯一の入口（Supabase ↔ モックを吸収）
   supabase.ts                 クライアント生成と設定判定
@@ -212,6 +216,7 @@ lib/
   profile.ts                  この端末の「名前＋大学」（認証の代わり）
   format.ts                   日付整形・location から大学タグを導く
   slots.ts                    空き時間探し（純関数）
+  manual.ts                   手動の予定と外部カレンダーの合成（純関数）
   ics.ts                      ICS から埋まっている時間を取り出す（純関数）
   meetings.ts                 会議の型・結果発表の選択肢（画面とサーバーで共有）
   server/                     サーバー専用（secret key・Google・ICS の取得・会議の決定）
@@ -228,17 +233,25 @@ tests/                        npm test（node --test）
 - **マイページ** — 「カレンダー連携」でサービスごとのスイッチをオンにする（複数オン可）。
   Google はスイッチを押すと同意画面へ飛ぶ。iPhone は iCloud の公開カレンダーの
   リンク（`webcal://…`）を貼る。Microsoft は準備中。オフにしない限りずっと使われる
+- **マイページ「毎週の予定」** — 授業・バイトなど毎週の予定を 30 分のマスで塗る（`WeeklySchedule`）。
+  全部の会議に効く。カレンダーを使わない人はこれだけでもよい
 - **`/schedule`** — 会議の一覧（募集中／決定済み）。「＋」から `/schedule/new` で作成。
   会議名・主催者・参加者・長さ・候補の範囲（開始日・日数・時間帯）・結果発表（何時間後か）を選ぶ
 - **`/schedule/[id]`** — 募集中は「今の時点の候補」（開くたびに最新のカレンダーで計算）と、
-  参加者本人用の「不参加にする」ボタン。押した人は計算から外れる（A が 1 減る）。
+  参加者本人用の「不参加にする」ボタンと「この会議の予定を手動で入れる」（候補の範囲だけを塗る。
+  下の層での見え方を薄く重ねて出す）。「不参加にする」を押した人は計算から外れる（A が 1 減る）。
   決定後は日時とカレンダー登録の導線（`CalendarLinks` を会議の長さで使う）
 
 決め方（`lib/server/meetings.ts` の `settle`）：
 
 - 候補は結果発表より後の時間だけ。全員そろう時間があればその中の一番早い時間、
   無ければ 1 人欠け（A-1 人）の一番早い時間。それも無ければ「不成立」
-- A は「参加者 − 不参加にした人 − カレンダー未連携／読み込めなかった人」。
+- 1 人ぶんの予定は 30 分のマスごとに合成する（`lib/manual.ts` の `combineBusy`）。優先順は
+  **この会議の予定 ＞ 毎週の予定 ＞ 外部カレンダー ＞ 何も無ければ空いている**。
+  手動の層は「予定あり／空いている」で塗り、「空いている以外は予定ありとみなす」をオンにすると、
+  その層で空いていると塗ったマス以外はすべて予定ありになる（出られる時間だけを塗りたい人向け）。
+  塗り直しはマスの上書きなので、同じマスでは後から塗ったほうが残る
+- A は「参加者 − 不参加にした人 − 予定未登録（外部カレンダーも手動の予定も無い）／読み込めなかった人」。
   未連携などで外れた人は、結果の下に名前だけ出す
 - 決まったら（不成立も）Discord のチャンネルに流す（`lib/server/discord.ts`）。
   チャンネルの Webhook の URL を `DISCORD_WEBHOOK_URL` に入れておく。無ければ流さない。
@@ -265,8 +278,7 @@ secret key で接続したときだけ触れる。
 
 ### 有効にする手順（初回だけ）
 
-1. Supabase の SQL Editor で [`004_calendar_sources.sql`](supabase/migrations/004_calendar_sources.sql) と
-   [`005_meetings.sql`](supabase/migrations/005_meetings.sql) を実行
+1. Supabase の SQL Editor で `supabase/migrations/` の 004〜007 を番号順に実行
 2. Google Cloud Console でプロジェクトを作り、Google Calendar API を有効にする
 3. OAuth 同意画面：User Type は「外部」、scope は `calendar.freebusy` と
    `calendar.calendarlist.readonly`（どちらも非機密なので審査は不要）。

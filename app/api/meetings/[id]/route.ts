@@ -1,10 +1,11 @@
 import type { NextRequest } from "next/server";
 import { getAdmin, NOT_CONFIGURED } from "@/lib/server/admin";
 import { availability, connectedMembers } from "@/lib/server/availability";
+import { manualMembers } from "@/lib/server/manual";
 import { declinesOf, rangeOf, settle, type Meeting } from "@/lib/server/meetings";
 
 /**
- * 会議の詳細。参加者ごとの状態（連携済み／未連携／参加できない）と、
+ * 会議の詳細。参加者ごとの状態（カレンダー連携／手動入力／未登録／読み込めない／不参加）と、
  * 募集中なら「今のカレンダーで決めたらどうなるか」の候補を返す。
  * 候補は結果発表より後の時間だけ（発表前の時間に決まることは無いので）。
  * 誰がいつ埋まっているかは返さない。
@@ -25,9 +26,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     return Response.json({ error: (e as Error).message }, { status: 500 });
   }
 
-  const [declined, connected] = await Promise.all([
+  const [declined, connected, manual] = await Promise.all([
     declinesOf(admin, id),
     connectedMembers(admin),
+    manualMembers(admin, id, meeting.participants),
   ]);
   let preview = null;
   if (meeting.status === "open") {
@@ -37,6 +39,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       members,
       rangeOf(meeting),
       Math.max(Date.now(), Date.parse(meeting.deadline)),
+      meeting.id,
     );
     preview = { result, unconnected, unreadable };
   }
@@ -51,7 +54,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         ? "unreadable"
         : connected.has(name)
           ? "connected"
-          : "unconnected",
+          : manual.has(name)
+            ? "manual"
+            : "unconnected",
   }));
 
   return Response.json({ meeting, participants, preview });

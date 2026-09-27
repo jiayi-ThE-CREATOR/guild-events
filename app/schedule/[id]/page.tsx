@@ -6,7 +6,9 @@ import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/Badge";
 import CalendarLinks from "@/components/CalendarLinks";
 import PageHeader from "@/components/PageHeader";
+import ScheduleEditor from "@/components/ScheduleEditor";
 import { fullDateTime, timeOnly } from "@/lib/format";
+import type { CellState, Cells } from "@/lib/manual";
 import { durationLabel, type ParticipantState } from "@/lib/meetings";
 import { useProfile } from "@/lib/profile";
 import type { SlotResult } from "@/lib/slots";
@@ -203,13 +205,15 @@ export default function MeetingPage() {
                     <p className="text-ink text-sm font-bold">
                       {me.state === "connected"
                         ? "あなたのカレンダーから空き時間を読んでいます"
-                        : me.state === "unreadable"
-                          ? "あなたのカレンダーを読み込めていません"
-                          : "カレンダーがまだつながっていません"}
+                        : me.state === "manual"
+                          ? "手動で入れた予定で計算しています"
+                          : me.state === "unreadable"
+                            ? "あなたのカレンダーを読み込めていません"
+                            : "まだ予定が登録されていません"}
                     </p>
                     <p className="text-ink-soft mt-1 text-xs">
-                      {me.state === "connected" ? (
-                        "何もしなくて大丈夫です。どの日時でも出られない場合だけ下を押してください。"
+                      {me.state === "connected" || me.state === "manual" ? (
+                        "何もしなくて大丈夫です。カレンダーと違う予定があれば下の「この会議の予定」で直せます。どの日時でも出られない場合は「不参加にする」を押してください。"
                       ) : me.state === "unreadable" ? (
                         <>
                           <Link href="/mypage" className="text-navy underline">マイページ</Link>
@@ -218,7 +222,7 @@ export default function MeetingPage() {
                       ) : (
                         <>
                           <Link href="/mypage" className="text-navy underline">マイページ</Link>
-                          でつなぐと、結果発表のときに自分の予定も考慮されます。
+                          でカレンダーをつなぐか毎週の予定を入れる、または下の「この会議の予定」を塗ると、結果発表のときに計算に入ります。
                         </>
                       )}
                     </p>
@@ -228,6 +232,13 @@ export default function MeetingPage() {
                   </>
                 )}
               </section>
+            )}
+            {me && me.state !== "declined" && profile && (
+              <MeetingEntry
+                meeting={m}
+                member={profile.name}
+                onSaved={async () => setDetail(await fetchDetail())}
+              />
             )}
             {isClient && !profile && (
               <p className="text-ink-soft mt-6 text-xs">
@@ -260,8 +271,9 @@ export default function MeetingPage() {
             {participants.map((p) => (
               <li key={p.name} className="border-line flex items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2.5">
                 <span className="text-ink truncate text-sm">{p.name}</span>
-                {p.state === "connected" && <Badge tone="navy">連携済み</Badge>}
-                {p.state === "unconnected" && <Badge tone="outline">未連携</Badge>}
+                {p.state === "connected" && <Badge tone="navy">カレンダー連携</Badge>}
+                {p.state === "manual" && <Badge tone="navy">手動入力</Badge>}
+                {p.state === "unconnected" && <Badge tone="outline">未登録</Badge>}
                 {p.state === "unreadable" && <Badge tone="amber">読み込めない</Badge>}
                 {p.state === "declined" && <Badge tone="muted">不参加</Badge>}
               </li>
@@ -338,7 +350,7 @@ function Excluded({
       {names.join("、")} さんは
       {unreadable
         ? "カレンダーをつないでいますが読み込めなかった（権限が足りない・連携が切れた等）ため、"
-        : "カレンダーがつながっていないため、"}
+        : "予定が登録されていない（カレンダーも手動の予定も無い）ため、"}
       {settled ? "計算に入っていません。" : "今は計算に入っていません。"}
     </p>
   );
@@ -358,7 +370,7 @@ function AttendanceLists({
   const attendees = m.attendees ?? [];
   const reasonOf = (name: string) =>
     m.excluded.includes(name)
-      ? "カレンダー未連携"
+      ? "予定未登録"
       : (m.unreadable ?? []).includes(name)
         ? "カレンダーを読み込めず"
         : "予定あり";
@@ -405,5 +417,88 @@ function AttendanceLists({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * 「この会議の予定」。候補の範囲の中だけを塗る。ここで塗ったマスは
+ * 毎週の予定・外部カレンダーより優先される。下の層での見え方を薄く重ねて出す。
+ */
+function MeetingEntry({
+  meeting: m,
+  member,
+  onSaved,
+}: {
+  meeting: Meeting;
+  member: string;
+  onSaved: () => Promise<void>;
+}) {
+  const [loaded, setLoaded] = useState<{
+    cells: Cells;
+    exclusive: boolean;
+    base: Record<string, CellState>;
+    calendarError: boolean;
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch(`/api/meetings/${m.id}/entry?member=${encodeURIComponent(member)}`)
+      .then(async (res) => {
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error);
+        if (alive) setLoaded(json);
+      })
+      .catch((e: Error) => alive && setError(e.message));
+    return () => {
+      alive = false;
+    };
+  }, [m.id, member]);
+
+  const midnight = Date.parse(`${m.from_date}T00:00:00+09:00`);
+  const days = Array.from({ length: m.days }, (_, i) => midnight + i * 24 * 60 * 60 * 1000);
+  const columns = days.map((d) => {
+    const [md, wd] = fullDateTime(new Date(d).toISOString()).split("（");
+    return { label: wd.slice(0, 1), sub: md };
+  });
+
+  async function save(cells: Cells, exclusive: boolean) {
+    const res = await fetch(`/api/meetings/${m.id}/entry`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ member, cells, exclusive }),
+    });
+    if (!res.ok) throw new Error((await res.json()).error);
+    await onSaved();
+  }
+
+  return (
+    <details className="border-line mt-4 rounded-2xl border bg-white p-4">
+      <summary className="text-ink cursor-pointer text-sm font-bold">この会議の予定を手動で入れる</summary>
+      <p className="text-ink-soft mt-2 mb-3 text-xs">
+        この会議の候補の中で、カレンダーと違うところや、カレンダーに無い予定を塗ってください。
+        ここで塗ったところが一番優先されます。
+      </p>
+      {error && <p className="text-amber bg-amber-soft rounded-xl p-3 text-xs">{error}</p>}
+      {loaded?.calendarError && (
+        <p className="text-amber bg-amber-soft mb-3 rounded-xl p-3 text-xs">
+          外部カレンダーを読み込めなかったので、薄い色の表示にカレンダーの予定は入っていません。
+        </p>
+      )}
+      {!loaded && !error && <p className="text-ink-soft py-4 text-center text-xs">読み込み中…</p>}
+      {loaded && (
+        <ScheduleEditor
+          columns={columns}
+          startMin={m.day_start_min}
+          endMin={m.day_end_min}
+          cellKey={(col, min) => String(days[col] + min * 60 * 1000)}
+          initialCells={loaded.cells}
+          initialExclusive={loaded.exclusive}
+          base={loaded.base}
+          baseNote="カレンダー・毎週の予定での予定あり"
+          onSave={save}
+        />
+      )}
+    </details>
   );
 }
