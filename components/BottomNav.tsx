@@ -11,7 +11,7 @@ const TABS = [
   },
   {
     href: "/schedule",
-    label: "日程調整",
+    label: "ミーティング",
     match: (p: string) => p.startsWith("/schedule"),
   },
   {
