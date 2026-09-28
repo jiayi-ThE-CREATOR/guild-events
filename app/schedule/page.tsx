@@ -44,7 +44,7 @@ export default function MeetingListPage() {
     <div className="px-4 pt-6 md:mx-auto md:max-w-3xl md:px-0 md:pt-0">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-ink text-2xl font-bold">日程調整</h1>
+          <h1 className="text-ink text-2xl font-bold">ミーティング</h1>
           <p className="text-ink-soft mt-1 text-xs md:text-sm">
             会議を作ると、結果発表の時刻にみんなのカレンダーから日時が自動で決まります。
           </p>
