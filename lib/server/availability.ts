@@ -1,16 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { combineBusy, isEmptyLayer } from "../manual";
+import { rangeIntervals, type CandidateRange } from "../ranges";
 import { findSlots, type Busy, type SlotResult } from "../slots";
 import type { CalendarSource } from "./admin";
 import { memberBusy } from "./busy";
 import { meetingLayers, weeklyLayers } from "./manual";
 
 export type SearchRange = {
-  fromDate: string;
-  days: number;
   durationMin: number;
-  dayStartMin: number;
-  dayEndMin: number;
+  ranges: CandidateRange[];
 };
 
 /**
@@ -43,8 +41,11 @@ export async function availability(
     meetingLayers(admin, meetingId, members),
   ]);
 
-  const from = Date.parse(`${range.fromDate}T00:00:00+09:00`);
-  const to = from + range.days * 24 * 60 * 60 * 1000;
+  // 予定は候補の最初の日の 0 時から最後の日の終わりまで読む（30 分の区切りにそろう）
+  const intervals = rangeIntervals(range.ranges);
+  const from = Date.parse(`${range.ranges.map((r) => r.fromDate).sort()[0]}T00:00:00+09:00`);
+  const lastDay = range.ranges.map((r) => r.toDate).sort().at(-1);
+  const to = Date.parse(`${lastDay}T00:00:00+09:00`) + 24 * 60 * 60 * 1000;
 
   const busyByMember: Record<string, Busy[]> = {};
   const unconnected: string[] = [];
@@ -67,7 +68,7 @@ export async function availability(
     }),
   );
 
-  const result = findSlots({ busyByMember, ...range, notBefore });
+  const result = findSlots({ busyByMember, durationMin: range.durationMin, intervals, notBefore });
   // 名前の並びは参加者の並びにそろえる（Promise.all の完了順にしない）
   return {
     result,

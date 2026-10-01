@@ -17,20 +17,27 @@ const DAY = 24 * 60 * MINUTE;
 export type SlotQuery = {
   /** 参加者ごとの予定。キーは名前 */
   busyByMember: Record<string, Busy[]>;
-  /** 探し始める日（日本時間の "YYYY-MM-DD"） */
-  fromDate: string;
-  /** 探す日数（fromDate を含む） */
-  days: number;
   /** 会議の長さ（分） */
   durationMin: number;
-  /** 1日のうち探す時間帯（日本時間、0時からの分） */
-  dayStartMin: number;
-  dayEndMin: number;
   /** 開始時刻の刻み（分） */
   stepMin?: number;
   /** これより前に始まる枠は出さない */
   notBefore?: number;
-};
+} & (
+  | {
+      /** 探す時間帯（UTC ミリ秒）。会議はこの中に収まるものだけ。候補が複数あるとき用 */
+      intervals: Busy[];
+    }
+  | {
+      /** 探し始める日（日本時間の "YYYY-MM-DD"） */
+      fromDate: string;
+      /** 探す日数（fromDate を含む） */
+      days: number;
+      /** 1日のうち探す時間帯（日本時間、0時からの分） */
+      dayStartMin: number;
+      dayEndMin: number;
+    }
+);
 
 /** 連続する候補をまとめた時間帯。この中の durationMin 分ならどこでも取れる */
 export type SlotWindow = { start: number; end: number };
@@ -68,17 +75,23 @@ export function findSlots(q: SlotQuery): SlotResult {
   const step = (q.stepMin ?? 30) * MINUTE;
   const duration = q.durationMin * MINUTE;
 
-  // 候補ごとの参加可能人数。日をまたいで窓がつながらないよう日ごとに分ける
+  // 探す時間帯。指定が無ければ「毎日 dayStartMin〜dayEndMin」を日数ぶん
+  let spans: Busy[];
+  if ("intervals" in q) {
+    spans = q.intervals;
+  } else {
+    const firstDay = jstMidnight(q.fromDate);
+    spans = Array.from({ length: q.days }, (_, i) => ({
+      start: firstDay + i * DAY + q.dayStartMin * MINUTE,
+      end: firstDay + i * DAY + q.dayEndMin * MINUTE,
+    }));
+  }
+
+  // 候補ごとの参加可能人数。時間帯をまたいで窓がつながらないよう時間帯ごとに分ける
   const days: { start: number; count: number }[][] = [];
-  const firstDay = jstMidnight(q.fromDate);
-  for (let i = 0; i < q.days; i++) {
-    const midnight = firstDay + i * DAY;
+  for (const span of spans) {
     const candidates: { start: number; count: number }[] = [];
-    for (
-      let start = midnight + q.dayStartMin * MINUTE;
-      start + duration <= midnight + q.dayEndMin * MINUTE;
-      start += step
-    ) {
+    for (let start = span.start; start + duration <= span.end; start += step) {
       if (q.notBefore !== undefined && start < q.notBefore) continue;
       const count = members.filter((m) =>
         isFree(q.busyByMember[m], start, start + duration),

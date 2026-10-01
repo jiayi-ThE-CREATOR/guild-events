@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { meetingRanges, type CandidateRange } from "../ranges";
 import type { Rsvp } from "../rsvp";
 import { freeMembers } from "../slots";
 import { availability } from "./availability";
@@ -16,6 +17,8 @@ export type Meeting = {
   days: number;
   day_start_min: number;
   day_end_min: number;
+  /** 候補（複数可）。null は 009 より前に作った会議で、古い列の 1 件として扱う */
+  ranges: CandidateRange[] | null;
   deadline: string;
   status: "open" | "confirmed" | "failed";
   confirmed_start: string | null;
@@ -31,13 +34,7 @@ export type Meeting = {
 };
 
 export function rangeOf(m: Meeting) {
-  return {
-    fromDate: m.from_date,
-    days: m.days,
-    durationMin: m.duration_min,
-    dayStartMin: m.day_start_min,
-    dayEndMin: m.day_end_min,
-  };
+  return { durationMin: m.duration_min, ranges: meetingRanges(m) };
 }
 
 export async function declinesOf(admin: SupabaseClient, meetingId: string): Promise<string[]> {

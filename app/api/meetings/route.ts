@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { MEETING_DEADLINE_HOURS } from "@/lib/meetings";
+import { envelope, rangeIntervals, rangesProblem, type CandidateRange } from "@/lib/ranges";
 import { isMember } from "@/lib/members";
 import { getAdmin, NOT_CONFIGURED } from "@/lib/server/admin";
 import { registeredMembers } from "@/lib/server/availability";
@@ -33,10 +34,7 @@ type Body = {
   organizer?: string;
   participants?: string[];
   durationMin?: number;
-  fromDate?: string;
-  days?: number;
-  dayStartMin?: number;
-  dayEndMin?: number;
+  ranges?: CandidateRange[];
   deadlineHours?: number;
 };
 
@@ -45,12 +43,9 @@ function invalid(b: Body): string | null {
   if (!b.organizer || !isMember(b.organizer)) return "主催者を選んでください";
   if (!Array.isArray(b.participants) || b.participants.length === 0) return "参加者を選んでください";
   if (!b.participants.every(isMember)) return "メンバー以外が含まれています";
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(b.fromDate ?? "")) return "候補の開始日が不正です";
-  if (!(b.days! >= 1 && b.days! <= 31)) return "候補の期間は 1〜31 日にしてください";
+  const rangeProblem = rangesProblem(b.ranges);
+  if (rangeProblem) return rangeProblem;
   if (!(b.durationMin! >= 15 && b.durationMin! <= 8 * 60)) return "会議の長さが不正です";
-  if (!(b.dayStartMin! >= 0 && b.dayEndMin! <= 24 * 60 && b.dayStartMin! < b.dayEndMin!)) {
-    return "時間帯が不正です";
-  }
   if (!MEETING_DEADLINE_HOURS.includes(b.deadlineHours!)) return "結果発表の時間が不正です";
   return null;
 }
@@ -63,10 +58,10 @@ export async function POST(req: NextRequest) {
   if (problem) return Response.json({ error: problem }, { status: 400 });
 
   const deadline = Date.now() + b.deadlineHours! * 60 * 60 * 1000;
-  const rangeEnd = Date.parse(`${b.fromDate}T00:00:00+09:00`) + b.days! * 24 * 60 * 60 * 1000;
-  if (rangeEnd <= deadline) {
+  const intervals = rangeIntervals(b.ranges!);
+  if (intervals[intervals.length - 1].end <= deadline) {
     return Response.json(
-      { error: "候補の期間が結果発表より前に終わってしまいます。期間を後ろにずらしてください" },
+      { error: "候補がすべて結果発表より前に終わってしまいます。候補を後ろにずらしてください" },
       { status: 400 },
     );
   }
@@ -80,10 +75,8 @@ export async function POST(req: NextRequest) {
       organizer: b.organizer,
       participants: [...new Set(b.participants)],
       duration_min: b.durationMin,
-      from_date: b.fromDate,
-      days: b.days,
-      day_start_min: b.dayStartMin,
-      day_end_min: b.dayEndMin,
+      ranges: b.ranges,
+      ...envelope(b.ranges!),
       deadline: new Date(deadline).toISOString(),
     })
     .select()

@@ -3,6 +3,7 @@ import { CELL_MIN, manualState, validCells, type CellState } from "@/lib/manual"
 import { getAdmin, NOT_CONFIGURED, type CalendarSource } from "@/lib/server/admin";
 import { memberBusy } from "@/lib/server/busy";
 import { weeklyLayers } from "@/lib/server/manual";
+import { rangeIntervals } from "@/lib/ranges";
 import { rangeOf, type Meeting } from "@/lib/server/meetings";
 
 /**
@@ -46,9 +47,9 @@ export async function GET(req: NextRequest, { params }: Params) {
       .eq("member_name", member),
   ]);
 
-  const range = rangeOf(meeting);
-  const from = Date.parse(`${range.fromDate}T00:00:00+09:00`);
-  const to = from + range.days * 24 * 60 * 60 * 1000;
+  const intervals = rangeIntervals(rangeOf(meeting).ranges);
+  const from = intervals[0].start;
+  const to = intervals[intervals.length - 1].end;
   let calendar: { start: number; end: number }[] = [];
   let calendarError = false;
   if ((sources ?? []).length > 0) {
@@ -63,10 +64,8 @@ export async function GET(req: NextRequest, { params }: Params) {
   const base: Record<string, CellState> = {};
   const cell = CELL_MIN * 60 * 1000;
   const w = weekly.get(member) ?? null;
-  for (let day = 0; day < range.days; day++) {
-    const midnight = from + day * 24 * 60 * 60 * 1000;
-    for (let min = range.dayStartMin; min < range.dayEndMin; min += CELL_MIN) {
-      const t = midnight + min * 60 * 1000;
+  for (const span of intervals) {
+    for (let t = span.start; t < span.end; t += cell) {
       const state =
         manualState(t, w, null) ??
         (calendar.some((b) => b.start < t + cell && b.end > t) ? "busy" : null);

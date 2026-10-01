@@ -31,6 +31,7 @@ export default function ScheduleEditor({
   startMin,
   endMin,
   cellKey,
+  isDisabled,
   initialCells,
   initialExclusive,
   base,
@@ -42,6 +43,8 @@ export default function ScheduleEditor({
   endMin: number;
   /** 列番号と 0 時からの分からマスのキーを作る */
   cellKey: (col: number, min: number) => string;
+  /** 塗れないマス（会議の候補の外など） */
+  isDisabled?: (col: number, min: number) => boolean;
   initialCells: Cells;
   initialExclusive: boolean;
   /** 下の層（毎週の予定・外部カレンダー）での見え方。薄く重ねて出す */
@@ -171,6 +174,15 @@ export default function ScheduleEditor({
                 </th>
                 {columns.map((_, col) => {
                   const key = cellKey(col, min);
+                  if (isDisabled?.(col, min)) {
+                    return (
+                      <td
+                        key={col}
+                        aria-disabled
+                        className="border-line cover-stripes h-5 min-w-9 border"
+                      />
+                    );
+                  }
                   return (
                     <td
                       key={col}
@@ -195,7 +207,9 @@ export default function ScheduleEditor({
       </div>
 
       <RangeForm columns={columns} startMin={startMin} endMin={endMin} onAdd={(col, from, to, state) => {
-        for (let m = from; m < to; m += CELL_MIN) apply(cellKey(col, m), state);
+        for (let m = from; m < to; m += CELL_MIN) {
+          if (!isDisabled?.(col, m)) apply(cellKey(col, m), state);
+        }
       }} />
 
       <label className="text-ink mt-4 flex items-start gap-2 text-xs">

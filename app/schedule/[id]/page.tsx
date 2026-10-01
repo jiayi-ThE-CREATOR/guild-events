@@ -10,6 +10,7 @@ import ScheduleEditor from "@/components/ScheduleEditor";
 import { fullDateTime, timeOnly } from "@/lib/format";
 import type { CellState, Cells } from "@/lib/manual";
 import { durationLabel, type ParticipantState } from "@/lib/meetings";
+import { inRanges, meetingRanges, rangeDates, rangeLabel, type CandidateRange } from "@/lib/ranges";
 import { useProfile } from "@/lib/profile";
 import type { SlotResult } from "@/lib/slots";
 import { useIsClient } from "@/lib/useIsClient";
@@ -31,6 +32,7 @@ type Meeting = {
   days: number;
   day_start_min: number;
   day_end_min: number;
+  ranges: CandidateRange[] | null;
   deadline: string;
   status: "open" | "confirmed" | "failed";
   confirmed_start: string | null;
@@ -49,14 +51,6 @@ type Detail = {
 };
 
 const iso = (ms: number) => new Date(ms).toISOString();
-
-function rangeLabel(m: Meeting) {
-  const [y, mo, d] = m.from_date.split("-").map(Number);
-  const start = new Date(Date.UTC(y, mo - 1, d));
-  const end = new Date(start.getTime() + (m.days - 1) * 24 * 60 * 60 * 1000);
-  const md = (x: Date) => `${x.getUTCMonth() + 1}/${x.getUTCDate()}`;
-  return `${md(start)}〜${md(end)}・${m.day_start_min / 60}時〜${m.day_end_min / 60}時`;
-}
 
 export default function MeetingPage() {
   const { id } = useParams<{ id: string }>();
@@ -153,7 +147,11 @@ export default function MeetingPage() {
         <dl className="border-line mt-4 divide-y divide-[var(--color-line)] rounded-2xl border bg-white text-sm">
           <Row label="主催">{m.organizer}</Row>
           <Row label="長さ">{durationLabel(m.duration_min)}</Row>
-          <Row label="候補">{rangeLabel(m)}</Row>
+          <Row label="候補">
+            {meetingRanges(m).map((r, i) => (
+              <span key={i} className="block">{rangeLabel(r)}</span>
+            ))}
+          </Row>
           <Row label="結果発表">{fullDateTime(m.deadline)}</Row>
           {m.location && <Row label="場所">{m.location}</Row>}
         </dl>
@@ -483,8 +481,11 @@ function MeetingEntry({
     };
   }, [m.id, member]);
 
-  const midnight = Date.parse(`${m.from_date}T00:00:00+09:00`);
-  const days = Array.from({ length: m.days }, (_, i) => midnight + i * 24 * 60 * 60 * 1000);
+  // 列は候補に出てくる日付だけ、行は候補全体の時間帯。候補の外のマスは塗れない
+  const ranges = meetingRanges(m);
+  const days = rangeDates(ranges).map((d) => Date.parse(`${d}T00:00:00+09:00`));
+  const startMin = Math.min(...ranges.map((r) => r.dayStartMin));
+  const endMin = Math.max(...ranges.map((r) => r.dayEndMin));
   const columns = days.map((d) => {
     const [md, wd] = fullDateTime(new Date(d).toISOString()).split("（");
     return { label: wd.slice(0, 1), sub: md };
@@ -517,9 +518,10 @@ function MeetingEntry({
       {loaded && (
         <ScheduleEditor
           columns={columns}
-          startMin={m.day_start_min}
-          endMin={m.day_end_min}
+          startMin={startMin}
+          endMin={endMin}
           cellKey={(col, min) => String(days[col] + min * 60 * 1000)}
+          isDisabled={(col, min) => !inRanges(ranges, days[col] + min * 60 * 1000, 30)}
           initialCells={loaded.cells}
           initialExclusive={loaded.exclusive}
           base={loaded.base}

@@ -15,6 +15,7 @@ const base: Meeting = {
   days: 4,
   day_start_min: 540,
   day_end_min: 1440,
+  ranges: null,
   deadline: "2026-09-26T02:41:08Z",
   status: "confirmed",
   confirmed_start: "2026-09-28T11:00:00Z",
@@ -88,4 +89,16 @@ test("あとから参加する／やめる", () => {
     ["🙋 **z** さんが参加します｜【ラクハン】定例（9/28（月）20:00〜）", "参加 3人", "🔗 u"].join("\n"),
   );
   assert.match(rsvpMessage(base, "a", false, 1, "u"), /^🙅 \*\*a\*\* さんが参加をやめました/);
+});
+
+test("募集開始：候補が複数なら / でつなぐ", () => {
+  const m = {
+    ...base,
+    status: "open" as const,
+    ranges: [
+      { fromDate: "2026-10-03", toDate: "2026-10-03", dayStartMin: 780, dayEndMin: 1080 },
+      { fromDate: "2026-10-07", toDate: "2026-10-08", dayStartMin: 1140, dayEndMin: 1320 },
+    ],
+  };
+  assert.match(openingMessage(m, [], "u"), /🗓 候補：10\/3・13時〜18時 \/ 10\/7〜10\/8・19時〜22時/);
 });

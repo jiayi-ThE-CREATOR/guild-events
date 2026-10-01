@@ -218,6 +218,7 @@ lib/
   format.ts                   日付整形・location から大学タグを導く
   slots.ts                    空き時間探し（純関数）
   manual.ts                   手動の予定と外部カレンダーの合成（純関数）
+  ranges.ts                   会議の候補（複数）の展開・検査・表示（純関数）
   ics.ts                      ICS から埋まっている時間を取り出す（純関数）
   meetings.ts                 会議の型・結果発表の選択肢（画面とサーバーで共有）
   server/                     サーバー専用（secret key・Google・ICS の取得・会議の決定）
@@ -237,7 +238,8 @@ tests/                        npm test（node --test）
 - **マイページ「毎週の予定」** — 授業・バイトなど毎週の予定を 30 分のマスで塗る（`WeeklySchedule`）。
   全部の会議に効く。カレンダーを使わない人はこれだけでもよい
 - **`/schedule`** — 会議の一覧（募集中／決定済み）。「＋」から `/schedule/new` で作成。
-  会議名・主催者・参加者・長さ・候補の範囲（開始日・日数・時間帯）・結果発表（何時間後か）を選ぶ
+  会議名・主催者・参加者・長さ・候補（複数可。1 件は「何日〜何日の毎日何時〜何時」）・結果発表（何時間後か）を選ぶ。
+  候補は `meetings.ranges`（`lib/ranges.ts`）。009 より前の会議は古い列（from_date など）から 1 件の候補として扱う
 - **`/schedule/[id]`** — 募集中は「今の時点の候補」（開くたびに最新のカレンダーで計算）と、
   参加者本人用の「不参加にする」ボタンと「この会議の予定を手動で入れる」（候補の範囲だけを塗る。
   下の層での見え方を薄く重ねて出す）。「不参加にする」を押した人は計算から外れる（A が 1 減る）。
@@ -281,7 +283,7 @@ secret key で接続したときだけ触れる。
 
 ### 有効にする手順（初回だけ）
 
-1. Supabase の SQL Editor で `supabase/migrations/` の 004〜008 を番号順に実行
+1. Supabase の SQL Editor で `supabase/migrations/` の 004〜009 を番号順に実行
 2. Google Cloud Console でプロジェクトを作り、Google Calendar API を有効にする
 3. OAuth 同意画面：User Type は「外部」、scope は `calendar.freebusy` と
    `calendar.calendarlist.readonly`（どちらも非機密なので審査は不要）。

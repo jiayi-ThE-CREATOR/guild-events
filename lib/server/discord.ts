@@ -1,5 +1,6 @@
 import { fullDateTime, timeOnly } from "../format.ts";
 import { durationLabel } from "../meetings.ts";
+import { meetingRanges, rangeLabel } from "../ranges.ts";
 import type { Meeting } from "./meetings";
 
 /**
@@ -46,13 +47,6 @@ export function meetingMessage(m: Meeting, declined: string[], url: string): str
   ].join("\n");
 }
 
-function rangeLabel(m: Meeting): string {
-  const [y, mo, d] = m.from_date.split("-").map(Number);
-  const start = new Date(Date.UTC(y, mo - 1, d));
-  const end = new Date(start.getTime() + (m.days - 1) * 24 * 60 * 60 * 1000);
-  const md = (x: Date) => `${x.getUTCMonth() + 1}/${x.getUTCDate()}`;
-  return `${md(start)}〜${md(end)}・${m.day_start_min / 60}時〜${m.day_end_min / 60}時`;
-}
 
 /** 募集開始。予定未登録の参加者は名前を挙げて、結果発表までに登録してもらう */
 export function openingMessage(m: Meeting, unconnected: string[], url: string): string {
@@ -60,7 +54,7 @@ export function openingMessage(m: Meeting, unconnected: string[], url: string): 
     `📣 **${m.title}** の日程調整を始めました`,
     `👤 主催：${m.organizer}`,
     `⏱ 長さ：${durationLabel(m.duration_min)}`,
-    `🗓 候補：${rangeLabel(m)}`,
+    `🗓 候補：${meetingRanges(m).map(rangeLabel).join(" / ")}`,
     m.location ? `📍 ${m.location}` : null,
     `⏰ 結果発表：${fullDateTime(m.deadline)}`,
     `👥 参加者（${m.participants.length}人）：${m.participants.join("、")}`,
