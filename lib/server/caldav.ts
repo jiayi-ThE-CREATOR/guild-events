@@ -11,6 +11,11 @@ import type { Busy } from "../slots";
  * 3. 各カレンダーに期間を指定して予定を問い合わせ（calendar-query）、返ってきた ICS を
  *    lib/ics.ts で「埋まっている時間」にする。件名などはそこで捨てる
  *
+ * Lark の実サーバーで分かった癖（2026-10-01 実測）：
+ * - calendar-query では calendar-data を返さない（404）。該当する予定の href だけは返るので、
+ *   calendar-multiget でまとめて取り直す（1 件ずつの GET は 403）
+ * - calendar-data の改行を &#xD;&#xA; の数値参照で書いてくる。XML ライブラリが戻さないので自分で戻す
+ *
  * XML の読み取りは純関数にして tests/caldav.test.ts で確かめている。
  */
 
@@ -27,9 +32,18 @@ const parser = new XMLParser({
 type Props = Record<string, unknown>;
 export type DavResponse = { href: string; props: Props };
 
+/** &#xD; &#10; のような数値文字参照を文字に戻す */
+export function decodeNumericRefs(s: string): string {
+  return s.replace(/&#(x[0-9a-f]+|\d+);/gi, (_, code: string) =>
+    String.fromCodePoint(code[0].toLowerCase() === "x" ? parseInt(code.slice(1), 16) : Number(code)),
+  );
+}
+
 function text(v: unknown): string {
-  if (typeof v === "string") return v;
-  if (v && typeof v === "object" && "#text" in v) return String((v as Record<string, unknown>)["#text"]);
+  if (typeof v === "string") return decodeNumericRefs(v);
+  if (v && typeof v === "object" && "#text" in v) {
+    return decodeNumericRefs(String((v as Record<string, unknown>)["#text"]));
+  }
   return "";
 }
 
@@ -76,6 +90,20 @@ export function calendarsFrom(responses: DavResponse[]): { href: string; name: s
 /** calendar-query の結果から ICS 本文を取り出す */
 export function icsTexts(responses: DavResponse[]): string[] {
   return responses.map((r) => text(r.props["calendar-data"])).filter((t) => t.includes("BEGIN:VCALENDAR"));
+}
+
+/** 本文を返してこなかった予定の href（重複なし）。multiget で取り直す対象 */
+export function hrefsWithoutData(responses: DavResponse[]): string[] {
+  const missing = responses
+    .filter((r) => r.href && !text(r.props["calendar-data"]).includes("BEGIN:VCALENDAR"))
+    .map((r) => r.href);
+  return [...new Set(missing)];
+}
+
+const MULTIGET_CHUNK = 50;
+
+function escapeXml(s: string) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function utcStamp(ms: number) {
@@ -176,7 +204,25 @@ export async function caldavBusy(creds: CaldavCreds, from: number, to: number): 
   const lists = await Promise.all(
     calendars.map(async (c) => {
       const r = await dav(creds, "REPORT", c.href, "1", query);
-      return icsTexts(r.responses).flatMap((ics) => busyFromIcs(ics, from, to));
+      const texts = icsTexts(r.responses);
+      // 本文を返さないサーバー（Lark）には、href を指定してまとめて取り直す
+      const missing = hrefsWithoutData(r.responses);
+      for (let i = 0; i < missing.length; i += MULTIGET_CHUNK) {
+        const hrefs = missing
+          .slice(i, i + MULTIGET_CHUNK)
+          .map((h) => `<d:href>${escapeXml(h)}</d:href>`)
+          .join("");
+        const got = await dav(
+          creds,
+          "REPORT",
+          c.href,
+          "1",
+          `<?xml version="1.0" encoding="utf-8"?><c:calendar-multiget xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:prop><c:calendar-data/></d:prop>${hrefs}</c:calendar-multiget>`,
+        );
+        texts.push(...icsTexts(got.responses));
+      }
+      // 同じ予定が二重に返ることがあるので本文単位で重複を除く
+      return [...new Set(texts)].flatMap((ics) => busyFromIcs(ics, from, to));
     }),
   );
   return lists.flat();

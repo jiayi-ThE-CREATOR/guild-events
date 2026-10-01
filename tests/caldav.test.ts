@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { calendarsFrom, hrefProp, icsTexts, normalizeServer, parseMultistatus } from "../lib/server/caldav.ts";
+import { calendarsFrom, decodeNumericRefs, hrefProp, hrefsWithoutData, icsTexts, normalizeServer, parseMultistatus } from "../lib/server/caldav.ts";
 
 // 名前空間の接頭辞はサーバーごとに違う（D: / d: / 既定名前空間）ので混ぜておく
 const principalXml = `<?xml version="1.0"?>
@@ -79,4 +79,25 @@ test("normalizeServer はホスト名だけでも https にし、http は localh
   assert.equal(normalizeServer("http://example.com"), null);
   assert.equal(normalizeServer("http://localhost:5232/"), "http://localhost:5232/");
   assert.equal(normalizeServer(""), null);
+});
+
+// Lark の実際の返し方（2026-10-01）：calendar-query は本文 404、multiget は改行を数値参照で返す
+const larkQueryXml = `<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:response><D:href>/u/cal/e1</D:href><D:propstat><D:prop><C:calendar-data/></D:prop><D:status>HTTP/1.1 404 Not Found</D:status></D:propstat></D:response>
+  <D:response><D:href>/u/cal/e1</D:href><D:propstat><D:prop><C:calendar-data/></D:prop><D:status>HTTP/1.1 404 Not Found</D:status></D:propstat></D:response>
+  <D:response><D:href>/u/cal/e2</D:href><D:propstat><D:prop><C:calendar-data/></D:prop><D:status>HTTP/1.1 404 Not Found</D:status></D:propstat></D:response>
+</D:multistatus>`;
+const larkMultigetXml = `<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:response><D:href>/u/cal/e1</D:href><D:propstat><D:prop><C:calendar-data>BEGIN:VCALENDAR&#xD;&#xA;PRODID:&#39;-//ByteDance Inc// Calendar&#xD;&#xA;BEGIN:VEVENT&#xD;&#xA;UID:e1&#xD;&#xA;DTSTART:20261005T010000Z&#xD;&#xA;DTEND:20261005T020000Z&#xD;&#xA;END:VEVENT&#xD;&#xA;END:VCALENDAR&#xD;&#xA;</C:calendar-data></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response></D:multistatus>`;
+
+test("本文を返さなかった予定の href を重複なしで挙げる（Lark の calendar-query）", () => {
+  const responses = parseMultistatus(larkQueryXml);
+  assert.deepEqual(icsTexts(responses), []);
+  assert.deepEqual(hrefsWithoutData(responses), ["/u/cal/e1", "/u/cal/e2"]);
+});
+
+test("数値参照の改行を戻して ICS として読める（Lark の multiget）", () => {
+  const [ics] = icsTexts(parseMultistatus(larkMultigetXml));
+  assert.match(ics, /\r\nBEGIN:VEVENT\r\n/);
+  assert.match(ics, /PRODID:'-\/\/ByteDance/);
+  assert.equal(decodeNumericRefs("a&#10;b&#x41;"), "a\nbA");
 });
