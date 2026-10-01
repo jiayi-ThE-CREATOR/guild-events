@@ -93,3 +93,20 @@ END:VEVENT`;
     ["2026-10-02T09:00:00.000Z", "2026-10-02T10:00:00.000Z"],
   ]);
 });
+
+test("本人が辞退した招待は数えず、未回答・承諾は数える（self を渡したときだけ）", () => {
+  const ev = (uid: string, h: number, partstat: string) => `
+BEGIN:VEVENT
+UID:${uid}
+DTSTART:20261001T0${h}0000Z
+DTEND:20261001T0${h + 1}0000Z
+ORGANIZER;CN=boss:MAILTO:boss@example.com
+ATTENDEE;CN=me;PARTSTAT=${partstat}:MAILTO:me@example.com
+ATTENDEE;CN=other;PARTSTAT=DECLINED:MAILTO:other@example.com
+END:VEVENT`;
+  const text = ics(ev("a", 1, "DECLINED") + ev("b", 3, "NEEDS-ACTION") + ev("c", 5, "ACCEPTED"));
+  const range = [Date.parse("2026-09-30T00:00:00Z"), Date.parse("2026-10-02T00:00:00Z")] as const;
+  assert.equal(busyFromIcs(text, ...range).length, 3);
+  assert.deepEqual(busyFromIcs(text, ...range, ["me"]).map((b) => new Date(b.start).getUTCHours()), [3, 5]);
+  assert.equal(busyFromIcs(text, ...range, ["ME@example.com"]).length, 2);
+});

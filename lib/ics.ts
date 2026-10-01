@@ -10,6 +10,8 @@ import type { Busy } from "./slots";
  * - 終日予定は数えない（Google の freeBusy と同じく、祝日や誕生日で
  *   一日中埋まってしまうのを避けるため）
  * - 「予定なし（TRANSP:TRANSPARENT）」とキャンセル済みも数えない
+ * - 本人が誰か分かるとき（self）は、本人が辞退（PARTSTAT=DECLINED）した招待も数えない。
+ *   未回答（NEEDS-ACTION）は数える（Google の freeBusy と同じ扱い）
  * - タイムゾーン指定の無い時刻は日本時間として扱う
  */
 
@@ -28,10 +30,21 @@ function toMs(t: ICAL.Time): number {
   return t.toUnixTime() * 1000;
 }
 
-function counts(event: ICAL.Event): boolean {
+function declinedBySelf(c: ICAL.Component, self: string[]): boolean {
+  if (self.length === 0) return false;
+  const names = self.map((s) => s.toLowerCase());
+  return c.getAllProperties("attendee").some((a) => {
+    const cn = String(a.getParameter("cn") ?? "").toLowerCase();
+    const mail = String(a.getFirstValue() ?? "").toLowerCase().replace(/^mailto:/, "");
+    return (names.includes(cn) || names.includes(mail)) && a.getParameter("partstat") === "DECLINED";
+  });
+}
+
+function counts(event: ICAL.Event, self: string[]): boolean {
   const c = event.component;
   if (c.getFirstPropertyValue("status") === "CANCELLED") return false;
   if (c.getFirstPropertyValue("transp") === "TRANSPARENT") return false;
+  if (declinedBySelf(c, self)) return false;
   return !event.startDate?.isDate;
 }
 
@@ -42,7 +55,8 @@ export function calendarName(text: string): string | null {
   return typeof name === "string" && name.trim() ? name.trim() : null;
 }
 
-export function busyFromIcs(text: string, from: number, to: number): Busy[] {
+/** self: 本人を表す名前・メールアドレス（ATTENDEE の CN か mailto と照らす）。分からなければ空 */
+export function busyFromIcs(text: string, from: number, to: number, self: string[] = []): Busy[] {
   const root = new ICAL.Component(ICAL.parse(text));
 
   // 時刻の値は読んだ時点で解釈されるので、先にタイムゾーンを登録しておく
@@ -72,7 +86,7 @@ export function busyFromIcs(text: string, from: number, to: number): Busy[] {
   };
 
   for (const event of singles) {
-    if (!counts(event)) continue;
+    if (!counts(event, self)) continue;
     push(toMs(event.startDate), toMs(event.endDate));
   }
 
@@ -82,7 +96,7 @@ export function busyFromIcs(text: string, from: number, to: number): Busy[] {
       if (toMs(next) >= to) break;
       const detail = master.getOccurrenceDetails(next);
       // 動かされた回は動かした先の内容（時間・予定なし設定など）で判定する
-      if (!counts(detail.item)) continue;
+      if (!counts(detail.item, self)) continue;
       push(toMs(detail.startDate), toMs(detail.endDate));
     }
   }

@@ -222,7 +222,9 @@ export async function caldavBusy(creds: CaldavCreds, from: number, to: number): 
         texts.push(...icsTexts(got.responses));
       }
       // 同じ予定が二重に返ることがあるので本文単位で重複を除く
-      return [...new Set(texts)].flatMap((ics) => busyFromIcs(ics, from, to));
+      // 本人が辞退した招待は数えない。Lark は本人の ATTENDEE の CN がカレンダー名と同じ
+      const self = [c.name, creds.username].filter(Boolean);
+      return [...new Set(texts)].flatMap((ics) => busyFromIcs(ics, from, to, self));
     }),
   );
   return lists.flat();
