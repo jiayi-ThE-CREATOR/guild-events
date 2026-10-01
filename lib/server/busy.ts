@@ -1,6 +1,7 @@
 import { busyFromIcs } from "../ics";
 import type { Busy } from "../slots";
 import type { CalendarSource } from "./admin";
+import { caldavBusy, type CaldavCreds } from "./caldav";
 import { googleBusy } from "./google";
 import { fetchIcs } from "./ics-fetch";
 
@@ -37,6 +38,7 @@ export async function memberBusy(
       withRetry(async () => {
         if (s.provider === "google") return googleBusy(s.secret, from, to);
         if (s.provider === "ics") return busyFromIcs(await fetchIcs(s.secret), from, to);
+        if (s.provider === "caldav") return caldavBusy(JSON.parse(s.secret) as CaldavCreds, from, to);
         throw new Error(`未対応のカレンダー: ${s.provider}`);
       }),
     ),

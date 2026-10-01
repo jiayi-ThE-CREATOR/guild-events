@@ -234,7 +234,9 @@ tests/                        npm test（node --test）
 
 - **マイページ** — 「カレンダー連携」でサービスごとのスイッチをオンにする（複数オン可）。
   Google はスイッチを押すと同意画面へ飛ぶ。iPhone は iCloud の公開カレンダーの
-  リンク（`webcal://…`）を貼る。Microsoft は準備中。オフにしない限りずっと使われる
+  リンク（`webcal://…`）を貼る。Lark は CalDAV（サーバー・ユーザー名・Lark が発行する同期用パスワード）を入れる
+  （`lib/server/caldav.ts`。principal → calendar-home-set → カレンダー一覧 → calendar-query の順に読み、
+  返ってきた ICS は `lib/ics.ts` で時間だけにする）。Microsoft は準備中。オフにしない限りずっと使われる
 - **マイページ「毎週の予定」** — 授業・バイトなど毎週の予定を 30 分のマスで塗る（`WeeklySchedule`）。
   全部の会議に効く。カレンダーを使わない人はこれだけでもよい
 - **`/schedule`** — 会議の一覧（募集中／決定済み）。「＋」から `/schedule/new` で作成。
@@ -283,7 +285,7 @@ secret key で接続したときだけ触れる。
 
 ### 有効にする手順（初回だけ）
 
-1. Supabase の SQL Editor で `supabase/migrations/` の 004〜009 を番号順に実行
+1. Supabase の SQL Editor で `supabase/migrations/` の 004〜010 を番号順に実行
 2. Google Cloud Console でプロジェクトを作り、Google Calendar API を有効にする
 3. OAuth 同意画面：User Type は「外部」、scope は `calendar.freebusy` と
    `calendar.calendarlist.readonly`（どちらも非機密なので審査は不要）。

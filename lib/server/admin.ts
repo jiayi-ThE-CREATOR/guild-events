@@ -24,7 +24,7 @@ export const NOT_CONFIGURED =
 export type CalendarSource = {
   id: string;
   member_name: string;
-  provider: "google" | "microsoft" | "ics";
+  provider: "google" | "microsoft" | "ics" | "caldav";
   label: string;
   secret: string;
 };

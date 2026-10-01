@@ -8,13 +8,14 @@ import { useCallback, useEffect, useState } from "react";
  *
  * - Google: スイッチをオン → Google の同意画面へ飛んで戻ってくる
  * - iPhone: 公開カレンダーのリンクを貼る（カレンダーごとに 1 本、何本でも）
+ * - Lark: CalDAV のサーバー・ユーザー名・同期用パスワードを入れる
  * - Microsoft: 準備中
  *
  * オフにする（または 1 件ずつ「解除」）とサーバーに保存した token / リンクを消す。
  * Google はあわせて Google 側の許可も取り消す。
  */
 
-type Source = { id: string; provider: "google" | "microsoft" | "ics"; label: string };
+type Source = { id: string; provider: "google" | "microsoft" | "ics" | "caldav"; label: string };
 
 async function fetchSources(member: string): Promise<Source[]> {
   const res = await fetch(`/api/calendar/sources?member=${encodeURIComponent(member)}`);
@@ -37,6 +38,7 @@ export default function CalendarConnections({ member }: { member: string }) {
     returned.get("calendar") === "connected" ? "Google カレンダーをつなぎました" : null,
   );
   const [icsOpen, setIcsOpen] = useState(false);
+  const [caldavOpen, setCaldavOpen] = useState(false);
 
   const load = useCallback(async () => {
     setSources(await fetchSources(member));
@@ -61,6 +63,7 @@ export default function CalendarConnections({ member }: { member: string }) {
 
   const google = (sources ?? []).filter((s) => s.provider === "google");
   const ics = (sources ?? []).filter((s) => s.provider === "ics");
+  const caldav = (sources ?? []).filter((s) => s.provider === "caldav");
 
   function connectGoogle() {
     window.location.href = `/api/calendar/google/start?member=${encodeURIComponent(member)}`;
@@ -88,6 +91,14 @@ export default function CalendarConnections({ member }: { member: string }) {
     if (ics.length === 0) return setIcsOpen(false);
     if (await remove({ provider: "ics" }, "iPhone カレンダーの連携をすべて解除しますか？")) {
       setIcsOpen(false);
+    }
+  }
+
+  async function toggleCaldav(on: boolean) {
+    if (on) return setCaldavOpen(true);
+    if (caldav.length === 0) return setCaldavOpen(false);
+    if (await remove({ provider: "caldav" }, "Lark カレンダーの連携をすべて解除しますか？")) {
+      setCaldavOpen(false);
     }
   }
 
@@ -150,6 +161,18 @@ export default function CalendarConnections({ member }: { member: string }) {
                   onRemove={(s) => remove({ id: s.id }, `「${s.label}」の連携を解除しますか？`)}
                 />
                 <IcsForm member={member} onAdded={load} />
+              </>
+            )}
+          </Row>
+
+          <Row title="Lark カレンダー" on={caldav.length > 0 || caldavOpen} onChange={toggleCaldav}>
+            {(caldav.length > 0 || caldavOpen) && (
+              <>
+                <Labels
+                  items={caldav}
+                  onRemove={(s) => remove({ id: s.id }, `「${s.label}」の連携を解除しますか？`)}
+                />
+                <CaldavForm member={member} onAdded={load} />
               </>
             )}
           </Row>
@@ -280,6 +303,71 @@ function IcsForm({ member, onAdded }: { member: string; onAdded: () => Promise<v
           className="bg-navy shrink-0 rounded-xl px-4 text-sm font-bold text-white disabled:opacity-40"
         >
           {saving ? "確認中…" : "追加"}
+        </button>
+      </form>
+      {message && <p className="text-amber mt-2 text-xs">{message}</p>}
+    </div>
+  );
+}
+
+/** Lark などの CalDAV。保存前にサーバー側で実際に読めるか確かめる */
+function CaldavForm({ member, onAdded }: { member: string; onAdded: () => Promise<void> }) {
+  const [server, setServer] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const field =
+    "border-line focus:border-navy w-full rounded-xl border bg-white px-3 py-2.5 text-sm outline-none";
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (saving) return;
+    setSaving(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/calendar/caldav", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ member, server, username, password }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      setServer("");
+      setUsername("");
+      setPassword("");
+      await onAdded();
+    } catch (err) {
+      setMessage((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mt-3">
+      <details className="text-ink-soft mb-2 text-xs">
+        <summary className="text-navy cursor-pointer">設定の取り方</summary>
+        <ol className="mt-2 list-decimal space-y-1 pl-5">
+          <li>Lark のパソコン版で、左上のプロフィール写真 →「設定」</li>
+          <li>「カレンダー」→「CalDAV 同期設定」で端末を選び「生成」</li>
+          <li>表示されたサーバー・ユーザー名・パスワードを下に貼って「つなぐ」</li>
+        </ol>
+        <p className="mt-2">
+          ※ ここに入れるのは同期専用のパスワードで、Lark にログインするパスワードではありません。
+          Lark 側でいつでも作り直せます（作り直したら、ここもつなぎ直してください）。
+        </p>
+      </details>
+      <form onSubmit={handleSubmit} className="space-y-2">
+        <input aria-label="サーバー" value={server} onChange={(e) => setServer(e.target.value)} placeholder="サーバー（例：caldav.larksuite.com）" className={field} autoComplete="off" />
+        <input aria-label="ユーザー名" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="ユーザー名" className={field} autoComplete="off" />
+        <input aria-label="パスワード" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="CalDAV 同期用パスワード" className={field} autoComplete="new-password" />
+        <button
+          type="submit"
+          disabled={!server.trim() || !username.trim() || !password || saving}
+          className="bg-navy w-full rounded-xl py-2.5 text-sm font-bold text-white disabled:opacity-40"
+        >
+          {saving ? "確認中…" : "つなぐ"}
         </button>
       </form>
       {message && <p className="text-amber mt-2 text-xs">{message}</p>}

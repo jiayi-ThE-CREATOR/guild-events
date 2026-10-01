@@ -35,6 +35,10 @@ export default function PrivacyPage() {
           カレンダー連携（iPhone）をオンにした場合：登録された公開カレンダーのリンク
         </li>
         <li>
+          カレンダー連携（Lark）をオンにした場合：CalDAV のサーバー・ユーザー名・同期用パスワード
+          （Lark で発行される同期専用のもので、Lark のログイン用パスワードではありません）
+        </li>
+        <li>
           「毎週の予定」「この会議の予定」に手動で入れた場合：30 分ごとの予定あり／空いているの区別
           （予定の内容は入力しません）
         </li>
@@ -63,7 +67,7 @@ export default function PrivacyPage() {
       <h2 className={h2}>4. 保存と管理</h2>
       <ul className={ul}>
         <li>
-          Google の認証情報（リフレッシュトークン）と iPhone カレンダーのリンクは、
+          Google の認証情報（リフレッシュトークン）、iPhone カレンダーのリンク、Lark の同期用の情報は、
           Supabase（東京リージョン）のデータベースに保存します。
           この保存先はブラウザからは読み書きできず、本サービスのサーバーからのみ参照します。
         </li>
