@@ -1,6 +1,7 @@
 import { fullDateTime, timeOnly } from "../format.ts";
 import { durationLabel } from "../meetings.ts";
 import { meetingRanges, rangeLabel } from "../ranges.ts";
+import { labelOf } from "../guests.ts";
 import type { Meeting } from "./meetings";
 
 /**
@@ -15,7 +16,14 @@ function reasonOf(m: Meeting, name: string): string {
   return "予定あり";
 }
 
-export function meetingMessage(m: Meeting, declined: string[], url: string): string {
+/** labels: 外部ゲストのキー（guest:<id>）→「名前（ゲスト）」。メンバーはそのまま */
+export function meetingMessage(
+  m: Meeting,
+  declined: string[],
+  url: string,
+  labels: Record<string, string> = {},
+): string {
+  const name = (k: string) => labelOf(labels, k);
   if (m.status === "confirmed" && m.confirmed_start) {
     const end = new Date(Date.parse(m.confirmed_start) + m.duration_min * 60 * 1000).toISOString();
     const attendees = m.attendees ?? [];
@@ -26,14 +34,14 @@ export function meetingMessage(m: Meeting, declined: string[], url: string): str
       `📅 **${m.title}** の日程が決まりました`,
       `🗓 ${fullDateTime(m.confirmed_start)}〜${timeOnly(end)}`,
       m.location ? `📍 ${m.location}` : null,
-      `✅ 参加できる（${attendees.length}人）：${attendees.join("、") || "なし"}`,
+      `✅ 参加できる（${attendees.length}人）：${attendees.map(name).join("、") || "なし"}`,
       absent.length > 0
         ? `❌ 参加できない（${absent.length}人）：${absent
-            .map((p) => `${p}（${reasonOf(m, p)}）`)
+            .map((p) => `${name(p)}（${reasonOf(m, p)}）`)
             .join("、")}`
         : null,
       declinedHere.length > 0
-        ? `🙅 不参加（${declinedHere.length}人）：${declinedHere.join("、")}`
+        ? `🙅 不参加（${declinedHere.length}人）：${declinedHere.map(name).join("、")}`
         : null,
       `🔗 ${url}`,
     ]
@@ -102,8 +110,13 @@ async function post(content: string) {
   }
 }
 
-export async function notifyDiscord(m: Meeting, declined: string[], origin: string) {
-  await post(meetingMessage(m, declined, `${origin}/schedule/${m.id}`));
+export async function notifyDiscord(
+  m: Meeting,
+  declined: string[],
+  origin: string,
+  labels: Record<string, string> = {},
+) {
+  await post(meetingMessage(m, declined, `${origin}/schedule/${m.id}`, labels));
 }
 
 export async function notifyRsvp(

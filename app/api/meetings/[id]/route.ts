@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { getAdmin, NOT_CONFIGURED } from "@/lib/server/admin";
 import { availability, connectedMembers } from "@/lib/server/availability";
+import { meetingMembers } from "@/lib/server/guests";
 import { manualMembers } from "@/lib/server/manual";
 import { declinesOf, rangeOf, rsvpsOf, settle, type Meeting } from "@/lib/server/meetings";
 import { applyRsvps } from "@/lib/rsvp";
@@ -27,6 +28,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     return Response.json({ error: (e as Error).message }, { status: 500 });
   }
 
+  // 参加者は選ばれたメンバーと外部ゲスト。ゲストは画面に出すとき labels で名前にする
+  const { keys, labels } = await meetingMembers(admin, meeting);
+  meeting = { ...meeting, participants: keys };
   let declined = await declinesOf(admin, id);
   // 決まった後の参加登録（参加する／やめる）を出欠に上書きする
   if (meeting.status === "confirmed") {
@@ -77,5 +81,5 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     !!meeting.confirmed_start &&
     Date.parse(meeting.confirmed_start) + meeting.duration_min * 60 * 1000 > Date.now();
 
-  return Response.json({ meeting, participants, preview, rsvpOpen });
+  return Response.json({ meeting, participants, preview, rsvpOpen, labels });
 }

@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { excludeSlot } from "@/lib/slots";
 import { getAdmin, NOT_CONFIGURED } from "@/lib/server/admin";
 import { availability } from "@/lib/server/availability";
+import { meetingMembers } from "@/lib/server/guests";
 import { declinesOf, rangeOf, type Meeting } from "@/lib/server/meetings";
 
 /**
@@ -25,7 +26,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const declined = await declinesOf(admin, id);
-  const members = meeting.participants.filter((p) => !declined.includes(p));
+  const { keys, labels } = await meetingMembers(admin, meeting);
+  const members = keys.filter((p) => !declined.includes(p));
   const { result, unconnected, unreadable } = await availability(
     admin,
     members,
@@ -39,5 +41,5 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     result.total > 0 && result.available === result.total
       ? excludeSlot(result.windows, start, start + meeting.duration_min * 60 * 1000, meeting.duration_min)
       : [];
-  return Response.json({ total: result.total, windows, unconnected, unreadable });
+  return Response.json({ total: result.total, windows, unconnected, unreadable, labels });
 }

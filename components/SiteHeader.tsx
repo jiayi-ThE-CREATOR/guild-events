@@ -27,6 +27,8 @@ const NAV = [
 export default function SiteHeader() {
   const pathname = usePathname();
   const profile = useProfile();
+  // 外部ゲストの招待ページでは、メンバー向けのナビを出さない
+  if (pathname.startsWith("/g/")) return null;
 
   return (
     <header className="border-line sticky top-0 z-20 hidden border-b bg-white/90 backdrop-blur md:block">

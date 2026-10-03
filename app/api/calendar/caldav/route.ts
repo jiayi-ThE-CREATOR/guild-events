@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
-import { isMember } from "@/lib/members";
 import { getAdmin, NOT_CONFIGURED } from "@/lib/server/admin";
 import { caldavBusy, discoverCalendars, normalizeServer } from "@/lib/server/caldav";
+import { resolveOwner } from "@/lib/server/owner";
 
 /**
  * CalDAV（Lark など）の登録。保存する前に実際にカレンダーを探して、
@@ -10,13 +10,15 @@ import { caldavBusy, discoverCalendars, normalizeServer } from "@/lib/server/cal
 export async function POST(req: NextRequest) {
   const admin = getAdmin();
   if (!admin) return Response.json({ error: NOT_CONFIGURED }, { status: 503 });
-  const { member, server, username, password } = (await req.json()) as {
+  const { member, guest, server, username, password } = (await req.json()) as {
     member?: string;
+    guest?: string;
     server?: string;
     username?: string;
     password?: string;
   };
-  if (!member || !isMember(member)) {
+  const owner = await resolveOwner(admin, { member, guest });
+  if (!owner) {
     return Response.json({ error: "メンバーではありません" }, { status: 400 });
   }
   const url = normalizeServer(server ?? "");
@@ -46,7 +48,7 @@ export async function POST(req: NextRequest) {
   const { data: existing } = await admin
     .from("calendar_sources")
     .select("id, secret")
-    .eq("member_name", member)
+    .eq("member_name", owner.key)
     .eq("provider", "caldav");
   const sameAccount = (existing ?? []).filter((r) => {
     try {
@@ -61,7 +63,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { error } = await admin.from("calendar_sources").insert({
-    member_name: member,
+    member_name: owner.key,
     provider: "caldav",
     label: label.slice(0, 200),
     secret: JSON.stringify(creds),

@@ -4,6 +4,7 @@ import type { Rsvp } from "../rsvp";
 import { freeMembers } from "../slots";
 import { availability } from "./availability";
 import { notifyDiscord } from "./discord";
+import { meetingMembers } from "./guests";
 
 export type Meeting = {
   id: string;
@@ -71,7 +72,9 @@ export async function settle(
   if (meeting.status !== "open" || Date.parse(meeting.deadline) > Date.now()) return meeting;
 
   const declined = await declinesOf(admin, meeting.id);
-  const members = meeting.participants.filter((p) => !declined.includes(p));
+  // 参加者は選ばれたメンバーと、招いた外部ゲスト（キーは guest:<id>）
+  const { keys, labels } = await meetingMembers(admin, meeting);
+  const members = keys.filter((p) => !declined.includes(p));
   const { result, unconnected, unreadable, busyByMember } = await availability(
     admin,
     members,
@@ -93,7 +96,7 @@ export async function settle(
             confirmed_start: new Date(first.start).toISOString(),
             confirmed_available: result.available,
             confirmed_total: result.total,
-            attendees: meeting.participants.filter((p) => attendees.includes(p)),
+            attendees: keys.filter((p) => attendees.includes(p)),
             excluded: unconnected,
             unreadable,
           }
@@ -109,7 +112,7 @@ export async function settle(
     const { data: fresh } = await admin.from("meetings").select().eq("id", meeting.id).single();
     return fresh as Meeting;
   }
-  await notifyDiscord(data as Meeting, declined, origin);
+  await notifyDiscord({ ...(data as Meeting), participants: keys }, declined, origin, labels);
   return data as Meeting;
 }
 

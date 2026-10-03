@@ -201,6 +201,9 @@ app/
   api/meetings/[id]/entry     この会議の予定（手動）の読み書き
   api/meetings/[id]/rsvp      決まった会議への参加登録
   api/meetings/[id]/alternatives  決まった時間のほかに全員が参加できる時間
+  api/meetings/[id]/guests    外部ゲストの一覧・招待リンク作成・削除（…/[guestId]/token で作り直し）
+  api/g/[token]/…             ゲスト本人用（会議の中身・不参加・この会議の予定）
+  g/[token]/page.tsx          外部ゲストの招待ページ
   api/weekly                  毎週の予定（手動）の読み書き
   api/schedule/members        予定を登録済み（カレンダーか毎週の予定）の人の名前
 components/
@@ -251,6 +254,13 @@ tests/                        npm test（node --test）
   出欠が変わったら Discord に短く流す）。その下に「ほかに全員が参加できる時間」（決まった時間を除き、今のカレンダーで
   計算し直す。`api/meetings/[id]/alternatives` を会議ページ本体とは別に読み込む）（`CalendarLinks` を会議の長さで使う）
 
+**外部ゲスト（招待リンク・ログイン無し）**：会議ページの「外部ゲスト」で名前を入れて招待リンク（`/g/<合言葉>`）を作る。
+リンクは作った直後に 1 回だけ表示し、DB（`meeting_guests`）には sha256 のハッシュだけを残す。なくしたら作り直す（古いリンクは無効）。
+ゲストのページはメンバー向けのナビを出さず、会議の中身・候補・決まった日時と人数だけを見せる（メンバーの名前は出さない）。
+ゲストはカレンダー連携・手動の予定・不参加をメンバーと同じテーブルで使い、`member_name` は `guest:<id>`（`lib/guests.ts`）。
+計算・自動決定・Discord ではメンバーと同じに扱い、表示だけ「名前（ゲスト）」にする。外すと予定・連携も消える（Google は許可も取り消す）。
+内部のページ（会議一覧など）はログインが無いので誰でも開ける点は変わらない（承知のうえ）。
+
 決め方（`lib/server/meetings.ts` の `settle`）：
 
 - 候補は結果発表より後の時間だけ。全員そろう時間があればその中の一番早い時間、
@@ -287,7 +297,7 @@ secret key で接続したときだけ触れる。
 
 ### 有効にする手順（初回だけ）
 
-1. Supabase の SQL Editor で `supabase/migrations/` の 004〜010 を番号順に実行
+1. Supabase の SQL Editor で `supabase/migrations/` の 004〜011 を番号順に実行
 2. Google Cloud Console でプロジェクトを作り、Google Calendar API を有効にする
 3. OAuth 同意画面：User Type は「外部」、scope は `calendar.freebusy` と
    `calendar.calendarlist.readonly`（どちらも非機密なので審査は不要）。

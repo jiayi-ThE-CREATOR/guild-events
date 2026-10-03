@@ -6,11 +6,11 @@ import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/Badge";
 import CalendarLinks from "@/components/CalendarLinks";
 import PageHeader from "@/components/PageHeader";
-import ScheduleEditor from "@/components/ScheduleEditor";
+import MeetingEntry from "@/components/MeetingEntry";
 import { fullDateTime, timeOnly } from "@/lib/format";
-import type { CellState, Cells } from "@/lib/manual";
+import { labelOf } from "@/lib/guests";
 import { durationLabel, type ParticipantState } from "@/lib/meetings";
-import { inRanges, meetingRanges, rangeDates, rangeLabel, type CandidateRange } from "@/lib/ranges";
+import { meetingRanges, rangeLabel, type CandidateRange } from "@/lib/ranges";
 import { useProfile } from "@/lib/profile";
 import type { SlotResult } from "@/lib/slots";
 import { useIsClient } from "@/lib/useIsClient";
@@ -48,6 +48,8 @@ type Detail = {
   participants: { name: string; state: ParticipantState }[];
   preview: { result: SlotResult; unconnected: string[]; unreadable: string[] } | null;
   rsvpOpen: boolean;
+  /** 外部ゲストのキー（guest:<id>）→「名前（ゲスト）」 */
+  labels: Record<string, string>;
 };
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -131,6 +133,7 @@ export default function MeetingPage() {
   }
 
   const { meeting: m, participants, preview } = detail;
+  const label = (key: string) => labelOf(detail.labels, key);
   const me = isClient && profile ? participants.find((p) => p.name === profile.name) : undefined;
 
   return (
@@ -183,9 +186,9 @@ export default function MeetingPage() {
                 onChange={setAttending}
               />
             )}
-            {m.attendees && <AttendanceLists meeting={m} participants={participants} />}
+            {m.attendees && <AttendanceLists meeting={m} participants={participants} label={label} />}
             {detail.rsvpOpen && <Alternatives meeting={m} />}
-            {!m.attendees && <Excluded names={m.excluded} settled />}
+            {!m.attendees && <Excluded names={m.excluded.map(label)} settled />}
             <CalendarLinks
               event={{
                 id: m.id,
@@ -210,8 +213,8 @@ export default function MeetingPage() {
                 会議を作成する
               </Link>
             </p>
-            <Excluded names={m.excluded} settled />
-            <Excluded names={m.unreadable ?? []} settled unreadable />
+            <Excluded names={m.excluded.map(label)} settled />
+            <Excluded names={(m.unreadable ?? []).map(label)} settled unreadable />
           </section>
         )}
 
@@ -262,8 +265,10 @@ export default function MeetingPage() {
             )}
             {me && me.state !== "declined" && profile && (
               <MeetingEntry
-                meeting={m}
-                member={profile.name}
+                ranges={meetingRanges(m)}
+                loadUrl={`/api/meetings/${m.id}/entry?member=${encodeURIComponent(profile.name)}`}
+                saveUrl={`/api/meetings/${m.id}/entry`}
+                saveBody={{ member: profile.name }}
                 onSaved={async () => setDetail(await fetchDetail())}
               />
             )}
@@ -283,11 +288,15 @@ export default function MeetingPage() {
                   もう一度計算し、一番早い時間に決まります。
                 </p>
                 <Preview result={preview.result} durationMin={m.duration_min} />
-                <Excluded names={preview.unconnected} />
-                <Excluded names={preview.unreadable} unreadable />
+                <Excluded names={preview.unconnected.map(label)} />
+                <Excluded names={preview.unreadable.map(label)} unreadable />
               </section>
             )}
           </>
+        )}
+
+        {m.status !== "failed" && (
+          <GuestsSection meetingId={m.id} onChange={async () => setDetail(await fetchDetail())} />
         )}
 
         {/* 決定後は「参加できる／できない」の 2 列が参加者一覧を兼ねる */}
@@ -297,7 +306,7 @@ export default function MeetingPage() {
           <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
             {participants.map((p) => (
               <li key={p.name} className="border-line flex items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2.5">
-                <span className="text-ink truncate text-sm">{p.name}</span>
+                <span className="text-ink truncate text-sm">{label(p.name)}</span>
                 {p.state === "connected" && <Badge tone="navy">カレンダー連携</Badge>}
                 {p.state === "manual" && <Badge tone="navy">手動入力</Badge>}
                 {p.state === "unconnected" && <Badge tone="outline">未登録</Badge>}
@@ -388,11 +397,13 @@ function Excluded({
  * 参加できる（空いている）／参加できない（出たいが出られない。理由つき）／不参加（自分で不参加と回答）
  */
 function AttendanceLists({
+  label,
   meeting: m,
   participants,
 }: {
   meeting: Meeting;
   participants: Detail["participants"];
+  label: (key: string) => string;
 }) {
   const attendees = m.attendees ?? [];
   const reasonOf = (name: string) =>
@@ -412,7 +423,7 @@ function AttendanceLists({
         <h2 className="text-grass text-sm font-bold">参加できる（{attendees.length}人）</h2>
         <ul className="mt-2 space-y-1.5">
           {attendees.map((name) => (
-            <li key={name} className="text-ink text-sm">{name}</li>
+            <li key={name} className="text-ink text-sm">{label(name)}</li>
           ))}
         </ul>
       </div>
@@ -424,7 +435,7 @@ function AttendanceLists({
           <ul className="mt-2 space-y-1.5">
             {absent.map((name) => (
               <li key={name} className="flex items-center justify-between gap-2">
-                <span className="text-ink truncate text-sm">{name}</span>
+                <span className="text-ink truncate text-sm">{label(name)}</span>
                 <span className="text-ink-soft shrink-0 text-[11px]">{reasonOf(name)}</span>
               </li>
             ))}
@@ -438,7 +449,7 @@ function AttendanceLists({
         ) : (
           <ul className="mt-2 space-y-1.5">
             {declined.map((name) => (
-              <li key={name} className="text-ink text-sm">{name}</li>
+              <li key={name} className="text-ink text-sm">{label(name)}</li>
             ))}
           </ul>
         )}
@@ -447,92 +458,6 @@ function AttendanceLists({
   );
 }
 
-/**
- * 「この会議の予定」。候補の範囲の中だけを塗る。ここで塗ったマスは
- * 毎週の予定・外部カレンダーより優先される。下の層での見え方を薄く重ねて出す。
- */
-function MeetingEntry({
-  meeting: m,
-  member,
-  onSaved,
-}: {
-  meeting: Meeting;
-  member: string;
-  onSaved: () => Promise<void>;
-}) {
-  const [loaded, setLoaded] = useState<{
-    cells: Cells;
-    exclusive: boolean;
-    base: Record<string, CellState>;
-    calendarError: boolean;
-  } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    fetch(`/api/meetings/${m.id}/entry?member=${encodeURIComponent(member)}`)
-      .then(async (res) => {
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error);
-        if (alive) setLoaded(json);
-      })
-      .catch((e: Error) => alive && setError(e.message));
-    return () => {
-      alive = false;
-    };
-  }, [m.id, member]);
-
-  // 列は候補に出てくる日付だけ、行は候補全体の時間帯。候補の外のマスは塗れない
-  const ranges = meetingRanges(m);
-  const days = rangeDates(ranges).map((d) => Date.parse(`${d}T00:00:00+09:00`));
-  const startMin = Math.min(...ranges.map((r) => r.dayStartMin));
-  const endMin = Math.max(...ranges.map((r) => r.dayEndMin));
-  const columns = days.map((d) => {
-    const [md, wd] = fullDateTime(new Date(d).toISOString()).split("（");
-    return { label: wd.slice(0, 1), sub: md };
-  });
-
-  async function save(cells: Cells, exclusive: boolean) {
-    const res = await fetch(`/api/meetings/${m.id}/entry`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ member, cells, exclusive }),
-    });
-    if (!res.ok) throw new Error((await res.json()).error);
-    await onSaved();
-  }
-
-  return (
-    <details className="border-line mt-4 rounded-2xl border bg-white p-4">
-      <summary className="text-ink cursor-pointer text-sm font-bold">この会議の予定を手動で入れる</summary>
-      <p className="text-ink-soft mt-2 mb-3 text-xs">
-        この会議の候補の中で、カレンダーと違うところや、カレンダーに無い予定を塗ってください。
-        ここで塗ったところが一番優先されます。
-      </p>
-      {error && <p className="text-amber bg-amber-soft rounded-xl p-3 text-xs">{error}</p>}
-      {loaded?.calendarError && (
-        <p className="text-amber bg-amber-soft mb-3 rounded-xl p-3 text-xs">
-          外部カレンダーを読み込めなかったので、薄い色の表示にカレンダーの予定は入っていません。
-        </p>
-      )}
-      {!loaded && !error && <p className="text-ink-soft py-4 text-center text-xs">読み込み中…</p>}
-      {loaded && (
-        <ScheduleEditor
-          columns={columns}
-          startMin={startMin}
-          endMin={endMin}
-          cellKey={(col, min) => String(days[col] + min * 60 * 1000)}
-          isDisabled={(col, min) => !inRanges(ranges, days[col] + min * 60 * 1000, 30)}
-          initialCells={loaded.cells}
-          initialExclusive={loaded.exclusive}
-          base={loaded.base}
-          baseNote="カレンダー・毎週の予定での予定あり"
-          onSave={save}
-        />
-      )}
-    </details>
-  );
-}
 
 /** 決まった会議への参加登録。参加者に選ばれていなかった人も押せる。会議が終わるまで */
 function RsvpCard({
@@ -593,6 +518,7 @@ function Alternatives({ meeting: m }: { meeting: Meeting }) {
     windows: { start: number; end: number }[];
     unconnected: string[];
     unreadable: string[];
+    labels: Record<string, string>;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -635,8 +561,170 @@ function Alternatives({ meeting: m }: { meeting: Meeting }) {
           </p>
         </>
       )}
-      {data && <Excluded names={data.unconnected} />}
-      {data && <Excluded names={data.unreadable} unreadable />}
+      {data && <Excluded names={data.unconnected.map((k) => labelOf(data.labels, k))} />}
+      {data && <Excluded names={data.unreadable.map((k) => labelOf(data.labels, k))} unreadable />}
+    </section>
+  );
+}
+
+type GuestRow = { id: string; name: string; state: ParticipantState };
+
+/**
+ * 外部ゲスト。名前を入れて招待リンクを作り、相手に送る。
+ * リンクは作った直後にだけ出る（DB にはハッシュしか残らない）。なくしたら作り直す。
+ */
+function GuestsSection({ meetingId, onChange }: { meetingId: string; onChange: () => Promise<void> }) {
+  const [guests, setGuests] = useState<GuestRow[] | null>(null);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [issued, setIssued] = useState<{ name: string; url: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const load = useCallback(async () => {
+    const res = await fetch(`/api/meetings/${meetingId}/guests`);
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error);
+    return json.guests as GuestRow[];
+  }, [meetingId]);
+
+  useEffect(() => {
+    let alive = true;
+    load()
+      .then((g) => alive && setGuests(g))
+      .catch((e: Error) => alive && setError(e.message));
+    return () => {
+      alive = false;
+    };
+  }, [load]);
+
+  async function run(action: () => Promise<void>) {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+      setGuests(await load());
+      await onChange();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function show(guestName: string, url: string) {
+    setIssued({ name: guestName, url });
+    setCopied(false);
+  }
+
+  async function add(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim() || busy) return;
+    await run(async () => {
+      const res = await fetch(`/api/meetings/${meetingId}/guests`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      show(name.trim(), json.url);
+      setName("");
+    });
+  }
+
+  async function reissue(g: GuestRow) {
+    if (!window.confirm(`${g.name} さんの招待リンクを作り直しますか？\n今のリンクは使えなくなります。`)) return;
+    await run(async () => {
+      const res = await fetch(`/api/meetings/${meetingId}/guests/${g.id}/token`, { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      show(g.name, json.url);
+    });
+  }
+
+  async function remove(g: GuestRow) {
+    if (!window.confirm(`${g.name} さんをこの会議から外しますか？\n入れた予定やカレンダー連携も消えます。`)) return;
+    await run(async () => {
+      const res = await fetch(`/api/meetings/${meetingId}/guests`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ guestId: g.id }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      if (issued?.name === g.name) setIssued(null);
+    });
+  }
+
+  const stateLabel: Record<string, string> = {
+    connected: "カレンダー連携",
+    manual: "手動入力",
+    unconnected: "未回答",
+    declined: "不参加",
+  };
+
+  return (
+    <section className="mt-8">
+      <h2 className="text-ink mb-1 text-sm font-bold md:text-base">外部ゲスト</h2>
+      <p className="text-ink-soft mb-3 text-xs">
+        メンバー以外の人を招けます。名前を入れて招待リンクを作り、相手に送ってください。
+        ゲストのページには、会議の内容・候補・決まった日時と人数だけが出ます（メンバーの名前は出ません）。
+      </p>
+
+      {error && <p className="text-amber bg-amber-soft mb-3 rounded-xl p-3 text-xs">{error}</p>}
+
+      {issued && (
+        <div className="bg-grass-soft mb-3 rounded-xl p-3">
+          <p className="text-ink text-xs font-bold">{issued.name} さんの招待リンク（この画面を閉じると二度と表示されません）</p>
+          <div className="mt-2 flex gap-2">
+            <input readOnly value={issued.url} onFocus={(e) => e.target.select()} className="border-line min-w-0 flex-1 rounded-lg border bg-white px-2 py-1.5 text-xs" />
+            <button
+              type="button"
+              onClick={async () => {
+                await navigator.clipboard.writeText(issued.url);
+                setCopied(true);
+              }}
+              className="bg-navy shrink-0 rounded-lg px-3 text-xs font-bold text-white"
+            >
+              {copied ? "コピー済み" : "コピー"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <form onSubmit={add} className="flex gap-2">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="ゲストの名前（例：教科書センター 山田さん）"
+          maxLength={50}
+          className="border-line focus:border-navy min-w-0 flex-1 rounded-xl border bg-white px-3 py-2.5 text-sm outline-none"
+        />
+        <button type="submit" disabled={!name.trim() || busy} className="bg-navy shrink-0 rounded-xl px-4 text-sm font-bold text-white disabled:opacity-40">
+          招待リンクを作る
+        </button>
+      </form>
+
+      {guests && guests.length > 0 && (
+        <ul className="mt-3 space-y-2">
+          {guests.map((g) => (
+            <li key={g.id} className="border-line flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2.5">
+              <span className="text-ink truncate text-sm">{g.name}</span>
+              <span className="flex items-center gap-2">
+                <Badge tone={g.state === "unconnected" ? "outline" : g.state === "declined" ? "muted" : "navy"}>
+                  {stateLabel[g.state] ?? g.state}
+                </Badge>
+                <button type="button" disabled={busy} onClick={() => reissue(g)} className="text-navy text-[11px] underline disabled:opacity-40">
+                  リンクを作り直す
+                </button>
+                <button type="button" disabled={busy} onClick={() => remove(g)} className="text-ink-soft text-[11px] underline disabled:opacity-40">
+                  外す
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

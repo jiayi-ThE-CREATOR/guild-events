@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { getAdmin, NOT_CONFIGURED } from "@/lib/server/admin";
 import { revokeGoogle } from "@/lib/server/google";
-import { isMember } from "@/lib/members";
+import { resolveOwner } from "@/lib/server/owner";
 
 /**
  * その人が連携しているカレンダーの一覧と、連携の解除。
@@ -11,13 +11,16 @@ import { isMember } from "@/lib/members";
 export async function GET(req: NextRequest) {
   const admin = getAdmin();
   if (!admin) return Response.json({ error: NOT_CONFIGURED }, { status: 503 });
-  const member = req.nextUrl.searchParams.get("member") ?? "";
-  if (!isMember(member)) return Response.json({ error: "メンバーではありません" }, { status: 400 });
+  const owner = await resolveOwner(admin, {
+    member: req.nextUrl.searchParams.get("member"),
+    guest: req.nextUrl.searchParams.get("guest"),
+  });
+  if (!owner) return Response.json({ error: "メンバーではありません" }, { status: 400 });
 
   const { data, error } = await admin
     .from("calendar_sources")
     .select("id, provider, label")
-    .eq("member_name", member)
+    .eq("member_name", owner.key)
     .order("created_at");
   if (error) return Response.json({ error: error.message }, { status: 500 });
   return Response.json({ sources: data });
@@ -25,24 +28,27 @@ export async function GET(req: NextRequest) {
 
 /**
  * { member, provider } でそのサービスを丸ごと解除、{ member, id } で 1 件だけ解除。
+ * ゲストは member の代わりに guest（招待リンクの合言葉）で来る。
  * Google は DB から消す前に Google 側の許可も取り消す。
  */
 export async function DELETE(req: NextRequest) {
   const admin = getAdmin();
   if (!admin) return Response.json({ error: NOT_CONFIGURED }, { status: 503 });
-  const { member, provider, id } = (await req.json()) as {
+  const { member, guest, provider, id } = (await req.json()) as {
     member?: string;
+    guest?: string;
     provider?: string;
     id?: string;
   };
-  if (!member || !isMember(member) || (!provider && !id)) {
+  const owner = await resolveOwner(admin, { member, guest });
+  if (!owner || (!provider && !id)) {
     return Response.json({ error: "指定が足りません" }, { status: 400 });
   }
 
   let query = admin
     .from("calendar_sources")
     .select("id, provider, secret")
-    .eq("member_name", member);
+    .eq("member_name", owner.key);
   query = id ? query.eq("id", id) : query.eq("provider", provider!);
   const { data: targets, error } = await query;
   if (error) return Response.json({ error: error.message }, { status: 500 });

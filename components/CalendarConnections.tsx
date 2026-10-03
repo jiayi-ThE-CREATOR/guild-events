@@ -17,14 +17,30 @@ import { useCallback, useEffect, useState } from "react";
 
 type Source = { id: string; provider: "google" | "microsoft" | "ics" | "caldav"; label: string };
 
-async function fetchSources(member: string): Promise<Source[]> {
-  const res = await fetch(`/api/calendar/sources?member=${encodeURIComponent(member)}`);
+/** 誰の連携か。メンバーは名前、外部ゲストは招待リンクの合言葉 */
+type Who = { member: string } | { guest: string };
+
+function whoQuery(who: Who): string {
+  return "guest" in who ? `guest=${encodeURIComponent(who.guest)}` : `member=${encodeURIComponent(who.member)}`;
+}
+
+async function fetchSources(who: Who): Promise<Source[]> {
+  const res = await fetch(`/api/calendar/sources?${whoQuery(who)}`);
   const json = await res.json();
   if (!res.ok) throw new Error(json.error);
   return json.sources;
 }
 
-export default function CalendarConnections({ member }: { member: string }) {
+export default function CalendarConnections({
+  member,
+  guestToken,
+}: {
+  member?: string;
+  /** 外部ゲストの招待ページで使うとき */
+  guestToken?: string;
+}) {
+  const query = guestToken ? `guest=${encodeURIComponent(guestToken)}` : `member=${encodeURIComponent(member ?? "")}`;
+  const who: Who = guestToken ? { guest: guestToken } : { member: member ?? "" };
   const [sources, setSources] = useState<Source[] | null>(null);
   // Google の同意画面から戻ってきたときの結果（?calendar=connected|error）。
   // マイページはクライアントでしか描画しないので、初期値で直接 URL を読める
@@ -41,18 +57,18 @@ export default function CalendarConnections({ member }: { member: string }) {
   const [caldavOpen, setCaldavOpen] = useState(false);
 
   const load = useCallback(async () => {
-    setSources(await fetchSources(member));
-  }, [member]);
+    setSources(await fetchSources(guestToken ? { guest: guestToken } : { member: member ?? "" }));
+  }, [member, guestToken]);
 
   useEffect(() => {
     let alive = true;
-    fetchSources(member)
+    fetchSources(guestToken ? { guest: guestToken } : { member: member ?? "" })
       .then((found) => alive && setSources(found))
       .catch((e: Error) => alive && setError(e.message));
     return () => {
       alive = false;
     };
-  }, [member]);
+  }, [member, guestToken]);
 
   // 結果は一度出したら URL から消す（再読み込みで二度出さない）
   useEffect(() => {
@@ -66,7 +82,7 @@ export default function CalendarConnections({ member }: { member: string }) {
   const caldav = (sources ?? []).filter((s) => s.provider === "caldav");
 
   function connectGoogle() {
-    window.location.href = `/api/calendar/google/start?member=${encodeURIComponent(member)}`;
+    window.location.href = `/api/calendar/google/start?${query}`;
   }
 
   async function remove(target: { provider: string } | { id: string }, confirmText: string) {
@@ -76,7 +92,7 @@ export default function CalendarConnections({ member }: { member: string }) {
     const res = await fetch("/api/calendar/sources", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ member, ...target }),
+      body: JSON.stringify({ ...who, ...target }),
     });
     if (!res.ok) {
       setError((await res.json()).error);
@@ -160,7 +176,7 @@ export default function CalendarConnections({ member }: { member: string }) {
                   items={ics}
                   onRemove={(s) => remove({ id: s.id }, `「${s.label}」の連携を解除しますか？`)}
                 />
-                <IcsForm member={member} onAdded={load} />
+                <IcsForm who={who} onAdded={load} />
               </>
             )}
           </Row>
@@ -172,7 +188,7 @@ export default function CalendarConnections({ member }: { member: string }) {
                   items={caldav}
                   onRemove={(s) => remove({ id: s.id }, `「${s.label}」の連携を解除しますか？`)}
                 />
-                <CaldavForm member={member} onAdded={load} />
+                <CaldavForm who={who} onAdded={load} />
               </>
             )}
           </Row>
@@ -245,7 +261,7 @@ function Labels({ items, onRemove }: { items: Source[]; onRemove?: (s: Source) =
   );
 }
 
-function IcsForm({ member, onAdded }: { member: string; onAdded: () => Promise<void> }) {
+function IcsForm({ who, onAdded }: { who: Who; onAdded: () => Promise<void> }) {
   const [url, setUrl] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -259,7 +275,7 @@ function IcsForm({ member, onAdded }: { member: string; onAdded: () => Promise<v
       const res = await fetch("/api/calendar/ics", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ member, url }),
+        body: JSON.stringify({ ...who, url }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error);
@@ -311,7 +327,7 @@ function IcsForm({ member, onAdded }: { member: string; onAdded: () => Promise<v
 }
 
 /** Lark などの CalDAV。保存前にサーバー側で実際に読めるか確かめる */
-function CaldavForm({ member, onAdded }: { member: string; onAdded: () => Promise<void> }) {
+function CaldavForm({ who, onAdded }: { who: Who; onAdded: () => Promise<void> }) {
   const [server, setServer] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -329,7 +345,7 @@ function CaldavForm({ member, onAdded }: { member: string; onAdded: () => Promis
       const res = await fetch("/api/calendar/caldav", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ member, server, username, password }),
+        body: JSON.stringify({ ...who, server, username, password }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error);
