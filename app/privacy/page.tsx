@@ -16,7 +16,7 @@ export default function PrivacyPage() {
   return (
     <article className="px-4 pt-6 pb-10 md:mx-auto md:max-w-3xl md:px-0 md:pt-0">
       <h1 className="text-ink text-2xl font-bold">プライバシーポリシー</h1>
-      <p className="text-ink-soft mt-1 text-xs">制定日：2026年9月25日</p>
+      <p className="text-ink-soft mt-1 text-xs">制定日：2026年9月25日・改定日：2026年10月3日</p>
 
       <p className={`${p} mt-5`}>
         GUILD イベント（以下「本サービス」）は、阪大 × 京大 AIコミュニティ「GUILD」の
@@ -62,10 +62,19 @@ export default function PrivacyPage() {
 
       <h2 className={h2}>3. 他のメンバーへの表示</h2>
       <p className={p}>
-        日程調整の結果として表示するのは、候補の時間帯と参加できる人数だけです。
-        誰がどの時間に予定を入れているかは、他のメンバーにも運営にも表示しません。
-        ただし、カレンダーを読み込めなかった場合に限り、連携し直してもらうために
-        そのメンバーのお名前を表示します。
+        会議ページ（メンバー向け）では、その会議の参加者について次のことを表示します。
+        予定の件名・場所・説明などの中身は、どこにも表示しません。
+      </p>
+      <ul className={`${ul} mt-2`}>
+        <li>候補の時間帯の 30 分ごとに、誰に予定があるか</li>
+        <li>
+          決まった日時に参加できる人・できない人と、その理由（予定あり・予定未登録・
+          カレンダーを読み込めない・不参加）
+        </li>
+      </ul>
+      <p className={`${p} mt-2`}>
+        外部ゲストの招待ページには、時間帯と人数だけを表示し、メンバーの名前は表示しません。
+        なお、会議ページはログインなしで開けるため、そのページの URL を知っている人は見ることができます。
       </p>
 
       <h2 className={h2}>4. 保存と管理</h2>

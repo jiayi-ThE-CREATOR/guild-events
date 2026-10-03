@@ -7,6 +7,7 @@ import { Badge } from "@/components/Badge";
 import CalendarLinks from "@/components/CalendarLinks";
 import PageHeader from "@/components/PageHeader";
 import MeetingEntry from "@/components/MeetingEntry";
+import MembersBusyGrid from "@/components/MembersBusyGrid";
 import RangesInput, { fromCandidateRanges, rangesReady, toCandidateRanges, type RangeRow } from "@/components/RangesInput";
 import { fullDateTime, timeOnly } from "@/lib/format";
 import { labelOf } from "@/lib/guests";
@@ -305,6 +306,23 @@ export default function MeetingPage() {
               </section>
             )}
           </>
+        )}
+
+        {m.status !== "failed" && (
+          <div className="mt-8">
+            <MembersBusyGrid
+              meetingId={m.id}
+              ranges={meetingRanges(m)}
+              decided={
+                m.status === "confirmed" && m.confirmed_start
+                  ? {
+                      start: Date.parse(m.confirmed_start),
+                      end: Date.parse(m.confirmed_start) + m.duration_min * 60 * 1000,
+                    }
+                  : null
+              }
+            />
+          </div>
         )}
 
         <ExtendSection meeting={m} onDone={async () => setDetail(await fetchDetail())} />
