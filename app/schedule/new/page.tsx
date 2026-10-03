@@ -3,9 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import NameSelect from "@/components/NameSelect";
+import RangesInput, { jstDate, rangesReady, toCandidateRanges, type RangeRow } from "@/components/RangesInput";
 import PageHeader from "@/components/PageHeader";
 import { MEETING_DEADLINE_HOURS, hoursLabel } from "@/lib/meetings";
-import { MAX_RANGES } from "@/lib/ranges";
 import { MEMBERS } from "@/lib/members";
 import { loadProfile } from "@/lib/profile";
 import { useIsClient } from "@/lib/useIsClient";
@@ -14,15 +14,7 @@ import { useIsClient } from "@/lib/useIsClient";
 
 const DURATIONS = [30, 60, 90, 120];
 
-type RangeRow = { fromDate: string; toDate: string; startHour: number; endHour: number };
-const HOURS = Array.from({ length: 25 }, (_, h) => h);
 
-/** 日本時間で今日から n 日後の "YYYY-MM-DD" */
-function jstDate(offsetDays: number): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo" }).format(
-    new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000),
-  );
-}
 
 export default function NewMeetingPage() {
   // 既定の日付・主催者は開いた時点・この端末の登録で決めたいので、描画はクライアントだけ
@@ -78,7 +70,7 @@ function MeetingForm() {
     title.trim() !== "" &&
     organizer !== "" &&
     participants.size > 0 &&
-    ranges.every((r) => r.fromDate && r.toDate >= r.fromDate && r.startHour < r.endHour);
+    rangesReady(ranges);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -95,12 +87,7 @@ function MeetingForm() {
           participants: MEMBERS.filter((m) => participants.has(m)),
           durationMin,
           deadlineHours,
-          ranges: ranges.map((r) => ({
-            fromDate: r.fromDate,
-            toDate: r.toDate,
-            dayStartMin: r.startHour * 60,
-            dayEndMin: r.endHour * 60,
-          })),
+          ranges: toCandidateRanges(ranges),
           location,
           description,
         }),
@@ -190,44 +177,7 @@ function MeetingForm() {
 
       <div>
         <span className={label}>候補（{ranges.length}件）</span>
-        <ul className="space-y-2">
-          {ranges.map((r, i) => {
-            const set = (patch: Partial<RangeRow>) =>
-              setRanges(ranges.map((x, j) => (j === i ? { ...x, ...patch } : x)));
-            return (
-              <li key={i} className="border-line rounded-xl border bg-white p-2.5">
-                <div className="flex items-center gap-1.5">
-                  <input aria-label={`候補${i + 1} いつから`} type="date" value={r.fromDate} min={jstDate(0)} onChange={(e) => set({ fromDate: e.target.value, toDate: r.toDate < e.target.value ? e.target.value : r.toDate })} className={`${field} min-w-0 flex-1`} required />
-                  <span className="text-ink-soft text-xs">〜</span>
-                  <input aria-label={`候補${i + 1} いつまで`} type="date" value={r.toDate} min={r.fromDate} onChange={(e) => set({ toDate: e.target.value })} className={`${field} min-w-0 flex-1`} required />
-                </div>
-                <div className="mt-1.5 flex items-center gap-1.5">
-                  <select aria-label={`候補${i + 1} 何時から`} value={r.startHour} onChange={(e) => set({ startHour: Number(e.target.value) })} className={`${field} min-w-0 flex-1`}>
-                    {HOURS.slice(0, 24).map((h) => <option key={h} value={h}>{h}時</option>)}
-                  </select>
-                  <span className="text-ink-soft text-xs">〜</span>
-                  <select aria-label={`候補${i + 1} 何時まで`} value={r.endHour} onChange={(e) => set({ endHour: Number(e.target.value) })} className={`${field} min-w-0 flex-1`}>
-                    {HOURS.slice(1).map((h) => <option key={h} value={h}>{h}時</option>)}
-                  </select>
-                  {ranges.length > 1 && (
-                    <button type="button" aria-label={`候補${i + 1}を消す`} onClick={() => setRanges(ranges.filter((_, j) => j !== i))} className="text-ink-soft shrink-0 px-2 text-lg leading-none">
-                      ×
-                    </button>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-        {ranges.length < MAX_RANGES && (
-          <button
-            type="button"
-            onClick={() => setRanges([...ranges, { ...ranges[ranges.length - 1] }])}
-            className="text-navy mt-2 text-xs font-semibold"
-          >
-            ＋ 候補を追加
-          </button>
-        )}
+        <RangesInput ranges={ranges} onChange={setRanges} field={field} />
         <p className="text-ink-soft mt-1.5 text-[11px]">
           1 日だけなら、始まりと終わりを同じ日にしてください。結果発表より後の時間の中から、一番早くそろう時間に決まります。
         </p>

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { meetingMessage, openingMessage, rsvpMessage } from "../lib/server/discord.ts";
+import { extendMessage, meetingMessage, openingMessage, rsvpMessage } from "../lib/server/discord.ts";
 import type { Meeting } from "../lib/server/meetings.ts";
 
 const base: Meeting = {
@@ -101,4 +101,21 @@ test("募集開始：候補が複数なら / でつなぐ", () => {
     ],
   };
   assert.match(openingMessage(m, [], "u"), /🗓 候補：10\/3・13時〜18時 \/ 10\/7〜10\/8・19時〜22時/);
+});
+
+test("募集の延長：決まっていた会議は取り消しの一言を入れる", () => {
+  const m = { ...base, status: "open" as const, deadline: "2026-10-08T11:00:00Z" };
+  const text = extendMessage(m, { status: "confirmed", confirmed_start: "2026-09-28T11:00:00Z" }, "u");
+  assert.equal(
+    text,
+    [
+      "⏰ **【ラクハン】定例** の募集を延長しました",
+      "決まっていた日時（9/28（月）20:00〜）は取り消しです。もう一度みんなの予定から決めます",
+      "🗓 候補：9/28〜10/1・9時〜24時",
+      "⏰ 結果発表：10/8（木）20:00",
+      "🔗 u",
+    ].join("\n"),
+  );
+  assert.ok(!extendMessage(m, { status: "open", confirmed_start: null }, "u").includes("取り消し"));
+  assert.match(extendMessage(m, { status: "failed", confirmed_start: null }, "u"), /もう一度募集します/);
 });

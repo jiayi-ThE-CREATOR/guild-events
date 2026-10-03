@@ -94,6 +94,35 @@ export function rsvpMessage(
   ].join("\n");
 }
 
+/** 募集を延長したとき。決まっていた・不成立だった会議を募集し直したときは、その旨も書く */
+export function extendMessage(
+  m: Meeting,
+  previous: { status: Meeting["status"]; confirmed_start: string | null },
+  url: string,
+): string {
+  return [
+    `⏰ **${m.title}** の募集を延長しました`,
+    previous.status === "confirmed" && previous.confirmed_start
+      ? `決まっていた日時（${fullDateTime(previous.confirmed_start)}〜）は取り消しです。もう一度みんなの予定から決めます`
+      : previous.status === "failed"
+        ? "時間が見つからなかったので、もう一度募集します"
+        : null,
+    `🗓 候補：${meetingRanges(m).map(rangeLabel).join(" / ")}`,
+    `⏰ 結果発表：${fullDateTime(m.deadline)}`,
+    `🔗 ${url}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+export async function notifyExtended(
+  m: Meeting,
+  previous: { status: Meeting["status"]; confirmed_start: string | null },
+  origin: string,
+) {
+  await post(extendMessage(m, previous, `${origin}/schedule/${m.id}`));
+}
+
 async function post(content: string) {
   const webhook = process.env.DISCORD_WEBHOOK_URL;
   if (!webhook) return;

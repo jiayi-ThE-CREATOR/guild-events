@@ -7,9 +7,10 @@ import { Badge } from "@/components/Badge";
 import CalendarLinks from "@/components/CalendarLinks";
 import PageHeader from "@/components/PageHeader";
 import MeetingEntry from "@/components/MeetingEntry";
+import RangesInput, { fromCandidateRanges, rangesReady, toCandidateRanges, type RangeRow } from "@/components/RangesInput";
 import { fullDateTime, timeOnly } from "@/lib/format";
 import { labelOf } from "@/lib/guests";
-import { durationLabel, type ParticipantState } from "@/lib/meetings";
+import { durationLabel, hoursLabel, MEETING_DEADLINE_HOURS, type ParticipantState } from "@/lib/meetings";
 import { meetingRanges, rangeLabel, type CandidateRange } from "@/lib/ranges";
 import { useProfile } from "@/lib/profile";
 import type { SlotResult } from "@/lib/slots";
@@ -294,6 +295,8 @@ export default function MeetingPage() {
             )}
           </>
         )}
+
+        <ExtendSection meeting={m} onDone={async () => setDetail(await fetchDetail())} />
 
         {m.status !== "failed" && (
           <GuestsSection meetingId={m.id} onChange={async () => setDetail(await fetchDetail())} />
@@ -726,5 +729,75 @@ function GuestsSection({ meetingId, onChange }: { meetingId: string; onChange: (
         </ul>
       )}
     </section>
+  );
+}
+
+/**
+ * 募集の延長。どの状態の会議でも、結果発表を今から何時間後かに置き直し、候補も入れ直せる。
+ * 決まっていた・不成立だった会議は募集中に戻る（決まっていた日時と出欠は取り消し）。
+ */
+function ExtendSection({ meeting: m, onDone }: { meeting: Meeting; onDone: () => Promise<void> }) {
+  const [hours, setHours] = useState(48);
+  const [ranges, setRanges] = useState<RangeRow[]>(() => fromCandidateRanges(meetingRanges(m)));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const field = "border-line focus:border-navy text-ink w-full rounded-xl border bg-white px-3 py-2.5 text-sm outline-none";
+
+  async function submit() {
+    if (saving || !rangesReady(ranges)) return;
+    const warn =
+      m.status === "confirmed" && m.confirmed_start
+        ? `決まっている日時（${fullDateTime(m.confirmed_start)}〜）は取り消され、もう一度みんなの予定から決め直します。よろしいですか？`
+        : m.status === "failed"
+          ? "もう一度募集します。よろしいですか？"
+          : `結果発表を今から${hoursLabel(hours)}にします。よろしいですか？`;
+    if (!window.confirm(warn)) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/meetings/${m.id}/extend`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deadlineHours: hours, ranges: toCandidateRanges(ranges) }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      await onDone();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <details className="border-line mt-8 rounded-2xl border bg-white p-4">
+      <summary className="text-ink cursor-pointer text-sm font-bold">
+        {m.status === "open" ? "募集を延長する" : "募集を延長してやり直す"}
+      </summary>
+      <p className="text-ink-soft mt-2 text-xs">
+        {m.status === "open"
+          ? "結果発表を遅らせます。候補も入れ直せます。"
+          : "募集中に戻して、新しい結果発表の時刻にもう一度自動で決めます。決まっていた日時と出欠は取り消しになります（各自の予定はそのまま使います）。"}
+      </p>
+      <label className="text-ink mt-3 mb-1 block text-xs font-semibold" htmlFor={`extend-${m.id}`}>
+        結果発表（今から）
+      </label>
+      <select id={`extend-${m.id}`} value={hours} onChange={(e) => setHours(Number(e.target.value))} className={field}>
+        {MEETING_DEADLINE_HOURS.map((h) => (
+          <option key={h} value={h}>{hoursLabel(h)}</option>
+        ))}
+      </select>
+      <p className="text-ink mt-3 mb-1 text-xs font-semibold">候補（{ranges.length}件）</p>
+      <RangesInput ranges={ranges} onChange={setRanges} field={field} />
+      {error && <p className="text-amber bg-amber-soft mt-3 rounded-xl p-3 text-xs">{error}</p>}
+      <button
+        type="button"
+        disabled={saving || !rangesReady(ranges)}
+        onClick={submit}
+        className="bg-navy mt-4 w-full rounded-xl py-3 text-sm font-bold text-white disabled:opacity-40"
+      >
+        {saving ? "更新中…" : "延長する"}
+      </button>
+    </details>
   );
 }
