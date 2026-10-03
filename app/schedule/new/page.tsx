@@ -73,7 +73,8 @@ function MeetingForm() {
   const ready =
     title.trim() !== "" &&
     organizer !== "" &&
-    participants.size > 0 &&
+    // メンバーを選ばなくても、外部ゲストがいれば作れる
+    (participants.size > 0 || guests.length > 0) &&
     rangesReady(ranges);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -147,7 +148,9 @@ function MeetingForm() {
       </div>
 
       <fieldset>
-        <legend className={label}>参加者（{participants.size}人）{req}</legend>
+        <legend className={label}>
+          参加者（{participants.size}人）{guests.length === 0 && req}
+        </legend>
         <ul className="grid grid-cols-2 gap-1.5">
           {MEMBERS.map((name) => {
             const unconnected = connected !== null && !connected.includes(name);
@@ -170,6 +173,7 @@ function MeetingForm() {
         </ul>
         <p className="text-ink-soft mt-1.5 text-[11px]">
           「未登録」の人は、結果発表までにカレンダーをつなぐか予定を手動で入れないと計算に入りません。
+          外部ゲストを入れる会議なら、メンバーは選ばなくても作れます（主催者も出るなら自分にチェック）。
         </p>
       </fieldset>
 

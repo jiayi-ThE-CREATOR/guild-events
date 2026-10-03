@@ -45,7 +45,10 @@ type Body = {
 function invalid(b: Body): string | null {
   if (!b.title?.trim()) return "会議名を入れてください";
   if (!b.organizer || !isMember(b.organizer)) return "主催者を選んでください";
-  if (!Array.isArray(b.participants) || b.participants.length === 0) return "参加者を選んでください";
+  if (!Array.isArray(b.participants)) return "参加者を選んでください";
+  // メンバーが誰もいなくても、外部ゲストがいれば作れる（主催者とゲストだけの会議など）
+  const guestCount = Array.isArray(b.guests) ? b.guests.length : 0;
+  if (b.participants.length === 0 && guestCount === 0) return "参加者か外部ゲストを 1 人以上入れてください";
   if (!b.participants.every(isMember)) return "メンバー以外が含まれています";
   if (b.guests !== undefined) {
     if (!Array.isArray(b.guests) || b.guests.length > MAX_GUESTS) return `ゲストは ${MAX_GUESTS} 人までです`;
