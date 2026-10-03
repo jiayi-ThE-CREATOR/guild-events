@@ -50,6 +50,10 @@ function MeetingForm() {
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 外部ゲスト（メンバー以外）。作成後に招待リンクを 1 回だけ表示する
+  const [guests, setGuests] = useState<string[]>([]);
+  const [guestName, setGuestName] = useState("");
+  const [created, setCreated] = useState<{ id: string; guests: { name: string; url: string }[] } | null>(null);
 
   // 参加者を選ぶときの目安（カレンダーをつないでいない人が分かるように）
   useEffect(() => {
@@ -90,11 +94,13 @@ function MeetingForm() {
           ranges: toCandidateRanges(ranges),
           location,
           description,
+          guests,
         }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error);
-      router.replace(`/schedule/${json.id}`);
+      if (json.guests?.length > 0) setCreated(json);
+      else router.replace(`/schedule/${json.id}`);
     } catch (err) {
       setError((err as Error).message);
       setSubmitting(false);
@@ -105,6 +111,17 @@ function MeetingForm() {
     "border-line focus:border-navy text-ink w-full rounded-xl border bg-white px-3.5 py-3 text-[15px] outline-none";
   const label = "text-ink mb-1.5 block text-xs font-semibold";
   const req = <span className="text-amber ml-0.5">*</span>;
+
+  function addGuest() {
+    const name = guestName.trim();
+    if (!name || guests.includes(name)) return;
+    setGuests([...guests, name]);
+    setGuestName("");
+  }
+
+  if (created) {
+    return <GuestLinks created={created} onDone={() => router.replace(`/schedule/${created.id}`)} />;
+  }
 
   return (
     <form
@@ -156,6 +173,45 @@ function MeetingForm() {
         </p>
       </fieldset>
 
+      <div>
+        <span className={label}>外部ゲスト（任意・{guests.length}人）</span>
+        <div className="flex gap-2">
+          <input
+            aria-label="ゲストの名前"
+            value={guestName}
+            onChange={(e) => setGuestName(e.target.value)}
+            onKeyDown={(e) => {
+              // 日本語変換の確定の Enter では追加しない
+              if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                addGuest();
+              }
+            }}
+            maxLength={50}
+            placeholder="メンバー以外の人の名前"
+            className={`${field} min-w-0 flex-1`}
+          />
+          <button type="button" onClick={addGuest} disabled={!guestName.trim()} className="border-navy text-navy shrink-0 rounded-xl border px-4 text-sm font-semibold disabled:opacity-40">
+            追加
+          </button>
+        </div>
+        {guests.length > 0 && (
+          <ul className="mt-2 flex flex-wrap gap-1.5">
+            {guests.map((g) => (
+              <li key={g} className="bg-navy-soft text-navy flex items-center gap-1 rounded-full py-1 pr-1.5 pl-3 text-xs">
+                {g}
+                <button type="button" aria-label={`${g}を外す`} onClick={() => setGuests(guests.filter((x) => x !== g))} className="px-1 text-sm leading-none">
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="text-ink-soft mt-1.5 text-[11px]">
+          作成すると一人ずつ招待リンクができます。リンクを相手に送ると、ログイン無しで予定を入れてもらえます。
+        </p>
+      </div>
+
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label htmlFor="duration" className={label}>会議の長さ</label>
@@ -203,5 +259,49 @@ function MeetingForm() {
         {submitting ? "作成中…" : "この会議で募集を始める"}
       </button>
     </form>
+  );
+}
+
+/** 作成直後の招待リンク。ここでしか表示されない（DB にはハッシュだけが残る） */
+function GuestLinks({
+  created,
+  onDone,
+}: {
+  created: { id: string; guests: { name: string; url: string }[] };
+  onDone: () => void;
+}) {
+  const [copied, setCopied] = useState<string | null>(null);
+  return (
+    <div className="px-4 pt-4 pb-6 md:rounded-2xl md:border md:border-line md:bg-white md:p-8">
+      <p className="text-grass text-sm font-bold">会議を作りました</p>
+      <h2 className="text-ink mt-1 text-lg font-bold">ゲストの招待リンク</h2>
+      <p className="text-amber bg-amber-soft mt-2 rounded-xl p-3 text-xs">
+        リンクはこの画面でしか表示されません。今コピーして、それぞれの相手に送ってください。
+        （なくしたら会議ページの「外部ゲスト」で作り直せます）
+      </p>
+      <ul className="mt-4 space-y-3">
+        {created.guests.map((g) => (
+          <li key={g.url}>
+            <p className="text-ink mb-1 text-sm font-semibold">{g.name}</p>
+            <div className="flex gap-2">
+              <input readOnly value={g.url} onFocus={(e) => e.target.select()} className="border-line min-w-0 flex-1 rounded-lg border bg-white px-2 py-1.5 text-xs" />
+              <button
+                type="button"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(g.url);
+                  setCopied(g.url);
+                }}
+                className="bg-navy shrink-0 rounded-lg px-3 text-xs font-bold text-white"
+              >
+                {copied === g.url ? "コピー済み" : "コピー"}
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <button type="button" onClick={onDone} className="bg-grass mt-6 w-full rounded-xl py-3.5 text-[15px] font-bold text-white">
+        コピーしたので会議ページへ
+      </button>
+    </div>
   );
 }

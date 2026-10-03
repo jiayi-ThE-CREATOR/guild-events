@@ -127,3 +127,10 @@ test("日時の変更：見出しに旧→新、続きは決定の知らせと�
   assert.equal(lines[1], "🗓 10/5（月）14:00〜15:00");
   assert.ok(lines.includes("✅ 参加できる（2人）：a、山田（ゲスト）"));
 });
+
+test("募集開始：ゲストは「名前（ゲスト）」で参加者と未登録に並ぶ", () => {
+  const m = { ...base, status: "open" as const, participants: ["a", "guest:x"] };
+  const text = openingMessage(m, ["guest:x"], "u", { "guest:x": "山田（ゲスト）" });
+  assert.match(text, /👥 参加者（2人）：a、山田（ゲスト）/);
+  assert.match(text, /⚠️ 予定未登録：山田（ゲスト）（/);
+});

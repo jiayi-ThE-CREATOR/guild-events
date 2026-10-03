@@ -57,7 +57,13 @@ export function meetingMessage(
 
 
 /** 募集開始。予定未登録の参加者は名前を挙げて、結果発表までに登録してもらう */
-export function openingMessage(m: Meeting, unconnected: string[], url: string): string {
+export function openingMessage(
+  m: Meeting,
+  unconnected: string[],
+  url: string,
+  labels: Record<string, string> = {},
+): string {
+  const name = (k: string) => labelOf(labels, k);
   return [
     `📣 **${m.title}** の日程調整を始めました`,
     `👤 主催：${m.organizer}`,
@@ -65,9 +71,9 @@ export function openingMessage(m: Meeting, unconnected: string[], url: string): 
     `🗓 候補：${meetingRanges(m).map(rangeLabel).join(" / ")}`,
     m.location ? `📍 ${m.location}` : null,
     `⏰ 結果発表：${fullDateTime(m.deadline)}`,
-    `👥 参加者（${m.participants.length}人）：${m.participants.join("、")}`,
+    `👥 参加者（${m.participants.length}人）：${m.participants.map(name).join("、")}`,
     unconnected.length > 0
-      ? `⚠️ 予定未登録：${unconnected.join("、")}（結果発表までに、マイページでカレンダーをつなぐか毎週の予定を入れる、または会議ページで予定を塗ってください。登録が無いと計算に入りません）`
+      ? `⚠️ 予定未登録：${unconnected.map(name).join("、")}（結果発表までに、マイページでカレンダーをつなぐか毎週の予定を入れる、または会議ページで予定を塗ってください。登録が無いと計算に入りません）`
       : null,
     "出られない人は、会議ページで「不参加にする」を押してください",
     `🔗 ${url}`,
@@ -183,6 +189,11 @@ export async function notifyRsvp(
   await post(rsvpMessage(m, member, attending, attendeeCount, `${origin}/schedule/${m.id}`));
 }
 
-export async function notifyOpened(m: Meeting, unconnected: string[], origin: string) {
-  await post(openingMessage(m, unconnected, `${origin}/schedule/${m.id}`));
+export async function notifyOpened(
+  m: Meeting,
+  unconnected: string[],
+  origin: string,
+  labels: Record<string, string> = {},
+) {
+  await post(openingMessage(m, unconnected, `${origin}/schedule/${m.id}`, labels));
 }

@@ -36,6 +36,30 @@ export async function guestByToken(admin: SupabaseClient, token: string): Promis
   return (data as Guest | null) ?? null;
 }
 
+export const MAX_GUESTS = 30;
+
+/** ゲストを作り、招待リンクを返す（リンクはここでしか分からない。DB にはハッシュだけ） */
+export async function createGuest(
+  admin: SupabaseClient,
+  meetingId: string,
+  name: string,
+  origin: string,
+): Promise<{ id: string; name: string; url: string }> {
+  const token = newToken();
+  const { data, error } = await admin
+    .from("meeting_guests")
+    .insert({ meeting_id: meetingId, name, token_hash: hashToken(token) })
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
+  return { id: data.id as string, name, url: `${origin}/g/${token}` };
+}
+
+/** ゲスト名の検査。問題があれば理由、無ければ null */
+export function guestNameProblem(name: string): string | null {
+  return !name || name.length > 50 ? "ゲストの名前を 50 文字以内で入れてください" : null;
+}
+
 /** ゲストのキー → 表示名 */
 export function guestLabels(guests: Guest[]): Record<string, string> {
   return Object.fromEntries(guests.map((g) => [guestKey(g.id), guestLabel(g.name)]));

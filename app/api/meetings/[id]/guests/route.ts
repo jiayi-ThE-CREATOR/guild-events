@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { guestKey } from "@/lib/guests";
 import { isEmptyLayer } from "@/lib/manual";
 import { getAdmin, NOT_CONFIGURED } from "@/lib/server/admin";
-import { guestsOf, hashToken, newToken, removeGuest } from "@/lib/server/guests";
+import { createGuest, guestNameProblem, guestsOf, MAX_GUESTS, removeGuest } from "@/lib/server/guests";
 
 /**
  * 会議の外部ゲスト（メンバーが使う）。
@@ -12,7 +12,6 @@ import { guestsOf, hashToken, newToken, removeGuest } from "@/lib/server/guests"
  */
 
 type Params = { params: Promise<{ id: string }> };
-const MAX_GUESTS = 30;
 
 export async function GET(_req: NextRequest, { params }: Params) {
   const admin = getAdmin();
@@ -53,9 +52,8 @@ export async function POST(req: NextRequest, { params }: Params) {
   const { id } = await params;
   const { name } = (await req.json()) as { name?: string };
   const trimmed = (name ?? "").trim();
-  if (!trimmed || trimmed.length > 50) {
-    return Response.json({ error: "ゲストの名前を 50 文字以内で入れてください" }, { status: 400 });
-  }
+  const problem = guestNameProblem(trimmed);
+  if (problem) return Response.json({ error: problem }, { status: 400 });
 
   const { data: meeting } = await admin.from("meetings").select("id, status").eq("id", id).maybeSingle();
   if (!meeting) return Response.json({ error: "会議が見つかりません" }, { status: 404 });
@@ -63,14 +61,12 @@ export async function POST(req: NextRequest, { params }: Params) {
     return Response.json({ error: `ゲストは ${MAX_GUESTS} 人までです` }, { status: 400 });
   }
 
-  const token = newToken();
-  const { data, error } = await admin
-    .from("meeting_guests")
-    .insert({ meeting_id: id, name: trimmed, token_hash: hashToken(token) })
-    .select("id")
-    .single();
-  if (error) return Response.json({ error: error.message }, { status: 500 });
-  return Response.json({ id: data.id, url: `${req.nextUrl.origin}/g/${token}` });
+  try {
+    const guest = await createGuest(admin, id, trimmed, req.nextUrl.origin);
+    return Response.json({ id: guest.id, url: guest.url });
+  } catch (e) {
+    return Response.json({ error: (e as Error).message }, { status: 500 });
+  }
 }
 
 export async function DELETE(req: NextRequest, { params }: Params) {
