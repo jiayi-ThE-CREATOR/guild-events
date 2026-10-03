@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { extendMessage, meetingMessage, openingMessage, rsvpMessage } from "../lib/server/discord.ts";
+import { extendMessage, meetingMessage, openingMessage, rescheduleMessage, rsvpMessage } from "../lib/server/discord.ts";
 import type { Meeting } from "../lib/server/meetings.ts";
 
 const base: Meeting = {
@@ -118,4 +118,12 @@ test("募集の延長：決まっていた会議は取り消しの一言を入�
   );
   assert.ok(!extendMessage(m, { status: "open", confirmed_start: null }, "u").includes("取り消し"));
   assert.match(extendMessage(m, { status: "failed", confirmed_start: null }, "u"), /もう一度募集します/);
+});
+
+test("日時の変更：見出しに旧→新、続きは決定の知らせと同じ（ゲストは名前に置き換え）", () => {
+  const m = { ...base, confirmed_start: "2026-10-05T05:00:00Z", participants: ["a", "guest:x"], attendees: ["a", "guest:x"], excluded: [], unreadable: [] };
+  const lines = rescheduleMessage(m, "2026-09-28T11:00:00Z", [], "u", { "guest:x": "山田（ゲスト）" }).split("\n");
+  assert.equal(lines[0], "🔁 **【ラクハン】定例** の日時を変更しました（9/28（月）20:00〜 → 10/5（月）14:00〜）");
+  assert.equal(lines[1], "🗓 10/5（月）14:00〜15:00");
+  assert.ok(lines.includes("✅ 参加できる（2人）：a、山田（ゲスト）"));
 });

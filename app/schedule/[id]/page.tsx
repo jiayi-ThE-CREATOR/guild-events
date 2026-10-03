@@ -62,6 +62,8 @@ export default function MeetingPage() {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // 「ほかに全員が参加できる時間」から押した時間。日時の変更欄に入れる
+  const [picked, setPicked] = useState<number | null>(null);
 
   const fetchDetail = useCallback(async () => {
     const res = await fetch(`/api/meetings/${id}`);
@@ -188,7 +190,16 @@ export default function MeetingPage() {
               />
             )}
             {m.attendees && <AttendanceLists meeting={m} participants={participants} label={label} />}
-            {detail.rsvpOpen && <Alternatives meeting={m} />}
+            {detail.rsvpOpen && <Alternatives meeting={m} onPick={setPicked} />}
+            <RescheduleSection
+              key={picked ?? "none"}
+              meeting={m}
+              picked={picked}
+              onDone={async () => {
+                setPicked(null);
+                setDetail(await fetchDetail());
+              }}
+            />
             {!m.attendees && <Excluded names={m.excluded.map(label)} settled />}
             <CalendarLinks
               event={{
@@ -515,7 +526,7 @@ function RsvpCard({
  * 決まった時間のほかに、全員が参加できる時間の一覧（日程を動かしたいとき用）。
  * カレンダーを読むので、ページ本体とは別にあとから読み込む。
  */
-function Alternatives({ meeting: m }: { meeting: Meeting }) {
+function Alternatives({ meeting: m, onPick }: { meeting: Meeting; onPick: (start: number) => void }) {
   const [data, setData] = useState<{
     total: number;
     windows: { start: number; end: number }[];
@@ -554,8 +565,13 @@ function Alternatives({ meeting: m }: { meeting: Meeting }) {
         <>
           <ul className="mt-3 space-y-1.5">
             {data.windows.map((w) => (
-              <li key={w.start} className="text-ink text-sm font-semibold">
-                {fullDateTime(iso(w.start))}〜{timeOnly(iso(w.end))}
+              <li key={w.start} className="flex items-center justify-between gap-2">
+                <span className="text-ink text-sm font-semibold">
+                  {fullDateTime(iso(w.start))}〜{timeOnly(iso(w.end))}
+                </span>
+                <button type="button" onClick={() => onPick(w.start)} className="text-navy shrink-0 text-[11px] underline">
+                  この時間に変える
+                </button>
               </li>
             ))}
           </ul>
@@ -797,6 +813,85 @@ function ExtendSection({ meeting: m, onDone }: { meeting: Meeting; onDone: () =>
         className="bg-navy mt-4 w-full rounded-xl py-3 text-sm font-bold text-white disabled:opacity-40"
       >
         {saving ? "更新中…" : "延長する"}
+      </button>
+    </details>
+  );
+}
+
+/** 日時を 30 分刻みの選択肢にするための値 */
+const HALF_HOURS = Array.from({ length: 48 }, (_, i) => i * 30);
+
+function jstParts(ms: number) {
+  const jst = new Date(ms + 9 * 60 * 60 * 1000);
+  return { date: jst.toISOString().slice(0, 10), min: jst.getUTCHours() * 60 + jst.getUTCMinutes() };
+}
+
+/**
+ * 決まった日時を手で変える。日付と開始時刻は自由（30 分刻み）。
+ * 変えると、新しい時間で出欠を計算し直し、あとからの参加登録は消える。Discord にも流れる。
+ */
+function RescheduleSection({
+  meeting: m,
+  picked,
+  onDone,
+}: {
+  meeting: Meeting;
+  picked: number | null;
+  onDone: () => Promise<void>;
+}) {
+  const [initial] = useState(() => jstParts(picked ?? Date.parse(m.confirmed_start ?? "")));
+  const [date, setDate] = useState(initial.date);
+  const [min, setMin] = useState(initial.min);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const field = "border-line focus:border-navy text-ink rounded-xl border bg-white px-3 py-2.5 text-sm outline-none";
+  const label = (x: number) => `${Math.floor(x / 60)}:${String(x % 60).padStart(2, "0")}`;
+
+  async function submit() {
+    const start = Date.parse(`${date}T00:00:00+09:00`) + min * 60 * 1000;
+    const text = `${fullDateTime(new Date(start).toISOString())}〜 に変更します。\n新しい時間で出欠を計算し直し、Discord にも流れます。よろしいですか？`;
+    if (!window.confirm(text)) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/meetings/${m.id}/reschedule`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ start: new Date(start).toISOString() }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      await onDone();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <details open={picked !== null} className="border-line rounded-2xl border bg-white p-4">
+      <summary className="text-ink cursor-pointer text-sm font-bold">日時を変更する</summary>
+      <p className="text-ink-soft mt-2 text-xs">
+        候補の外の日時にもできます。変えると、新しい時間でみんなの予定から出欠を計算し直します
+        （あとから押した「参加する／やめる」は消えます）。
+      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <input aria-label="日付" type="date" value={date} onChange={(e) => setDate(e.target.value)} className={field} />
+        <select aria-label="開始時刻" value={min} onChange={(e) => setMin(Number(e.target.value))} className={field}>
+          {HALF_HOURS.map((x) => (
+            <option key={x} value={x}>{label(x)}</option>
+          ))}
+        </select>
+        <span className="text-ink-soft text-xs">から {durationLabel(m.duration_min)}</span>
+      </div>
+      {error && <p className="text-amber bg-amber-soft mt-3 rounded-xl p-3 text-xs">{error}</p>}
+      <button
+        type="button"
+        disabled={saving || !date}
+        onClick={submit}
+        className="bg-navy mt-4 w-full rounded-xl py-3 text-sm font-bold text-white disabled:opacity-40"
+      >
+        {saving ? "変更中…" : "この日時に変更する"}
       </button>
     </details>
   );

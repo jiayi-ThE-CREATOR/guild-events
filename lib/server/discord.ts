@@ -123,6 +123,31 @@ export async function notifyExtended(
   await post(extendMessage(m, previous, `${origin}/schedule/${m.id}`));
 }
 
+/** 決まった日時を手で変えたとき。中身は決定の知らせと同じで、見出しだけ変更にする */
+export function rescheduleMessage(
+  m: Meeting,
+  previousStart: string,
+  declined: string[],
+  url: string,
+  labels: Record<string, string> = {},
+): string {
+  const lines = meetingMessage(m, declined, url, labels).split("\n");
+  return [
+    `🔁 **${m.title}** の日時を変更しました（${fullDateTime(previousStart)}〜 → ${fullDateTime(m.confirmed_start!)}〜）`,
+    ...lines.slice(1),
+  ].join("\n");
+}
+
+export async function notifyRescheduled(
+  m: Meeting,
+  previousStart: string,
+  declined: string[],
+  origin: string,
+  labels: Record<string, string> = {},
+) {
+  await post(rescheduleMessage(m, previousStart, declined, `${origin}/schedule/${m.id}`, labels));
+}
+
 async function post(content: string) {
   const webhook = process.env.DISCORD_WEBHOOK_URL;
   if (!webhook) return;
