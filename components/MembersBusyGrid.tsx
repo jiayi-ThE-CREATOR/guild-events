@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import DayPager, { DAYS_PER_PAGE, pageColumns, pageCount } from "@/components/DayPager";
 import { fullDateTime, timeOnly } from "@/lib/format";
 import { labelOf } from "@/lib/guests";
 import { CELL_MIN } from "@/lib/manual";
@@ -64,6 +65,15 @@ export default function MembersBusyGrid({
     return { label: wd.slice(0, 1), sub: md };
   });
 
+  // 日数が多いときは 1 週間ずつめくる。決まった会議は、その日を含むページから
+  const [page, setPage] = useState(() => {
+    if (!decided) return 0;
+    const i = days.findIndex((d) => decided.start >= d && decided.start < d + 24 * 60 * 60 * 1000);
+    return i < 0 ? 0 : Math.floor(i / DAYS_PER_PAGE);
+  });
+  const visible = pageColumns(days.length, page);
+  const pageLabel = [columns[visible[0]], columns[visible[visible.length - 1]]].map((c) => c.sub).join("〜");
+
   const total = data?.members.length ?? 0;
   const name = (k: string) => (data ? labelOf(data.labels, k) : k);
   const busyAt = (t: number) => data?.cells[String(t)] ?? [];
@@ -88,15 +98,18 @@ export default function MembersBusyGrid({
 
       {data && (
         <>
-          <div className="border-line mt-3 overflow-x-auto rounded-xl border">
+          <div className="mt-3">
+            <DayPager page={page} pages={pageCount(days.length)} label={pageLabel} onChange={setPage} />
+          </div>
+          <div className="border-line overflow-x-auto rounded-xl border">
             <table className="w-full border-collapse select-none text-[10px]">
               <thead>
                 <tr>
                   <th className="w-10" />
-                  {columns.map((c, i) => (
+                  {visible.map((i) => (
                     <th key={i} className="text-ink px-0.5 py-1.5 text-center font-semibold">
-                      {c.label}
-                      <span className="text-ink-soft block font-normal">{c.sub}</span>
+                      {columns[i].label}
+                      <span className="text-ink-soft block font-normal">{columns[i].sub}</span>
                     </th>
                   ))}
                 </tr>
@@ -107,8 +120,8 @@ export default function MembersBusyGrid({
                     <th scope="row" className="text-ink-soft w-10 pr-1 text-right align-top font-normal leading-none">
                       {min % 60 === 0 ? hhmm(min) : ""}
                     </th>
-                    {days.map((d, col) => {
-                      const t = d + min * 60 * 1000;
+                    {visible.map((col) => {
+                      const t = days[col] + min * 60 * 1000;
                       if (!inRanges(ranges, t, CELL_MIN)) {
                         return <td key={col} className="border-line cover-stripes h-5 min-w-9 border" />;
                       }

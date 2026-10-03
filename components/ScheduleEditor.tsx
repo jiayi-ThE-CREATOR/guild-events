@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import DayPager, { pageColumns, pageCount } from "@/components/DayPager";
 import { CELL_MIN, type CellState, type Cells } from "@/lib/manual";
 
 /**
@@ -60,6 +61,13 @@ export default function ScheduleEditor({
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   // 1 回のなぞりの間に同じマスを何度も切り替えないよう、塗る内容を押した瞬間に決める
   const stroke = useRef<Brush | null>(null);
+
+  // 列（日・曜日）が多いときは 1 週間ずつめくる。塗った内容はページをまたいで保たれる
+  const [page, setPage] = useState(0);
+  const visible = pageColumns(columns.length, page);
+  const pageLabel = [columns[visible[0]], columns[visible[visible.length - 1]]]
+    .map((c) => c.sub ?? c.label)
+    .join("〜");
 
   const rows: number[] = [];
   for (let m = startMin; m < endMin; m += CELL_MIN) rows.push(m);
@@ -144,15 +152,16 @@ export default function ScheduleEditor({
         ))}
       </div>
 
+      <DayPager page={page} pages={pageCount(columns.length)} label={pageLabel} onChange={setPage} />
       <div className="border-line overflow-x-auto rounded-2xl border bg-white">
         <table className="w-full border-collapse select-none text-[10px]">
           <thead>
             <tr>
               <th className="bg-white w-10" />
-              {columns.map((c, i) => (
+              {visible.map((i) => (
                 <th key={i} className="text-ink px-0.5 py-1.5 text-center font-semibold">
-                  {c.label}
-                  {c.sub && <span className="text-ink-soft block font-normal">{c.sub}</span>}
+                  {columns[i].label}
+                  {columns[i].sub && <span className="text-ink-soft block font-normal">{columns[i].sub}</span>}
                 </th>
               ))}
             </tr>
@@ -172,7 +181,7 @@ export default function ScheduleEditor({
                 >
                   {min % 60 === 0 ? hhmm(min) : ""}
                 </th>
-                {columns.map((_, col) => {
+                {visible.map((col) => {
                   const key = cellKey(col, min);
                   if (isDisabled?.(col, min)) {
                     return (
