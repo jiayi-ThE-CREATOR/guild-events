@@ -138,6 +138,24 @@ export default function MeetingPage() {
 
   const { meeting: m, participants, preview } = detail;
   const label = (key: string) => labelOf(detail.labels, key);
+
+  const participantsSection = (
+    <section className="mt-6">
+      <h2 className="text-ink mb-3 text-sm font-bold md:text-base">参加者（{participants.length}人）</h2>
+      <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
+        {participants.map((p) => (
+          <li key={p.name} className="border-line flex items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2.5">
+            <span className="text-ink truncate text-sm">{label(p.name)}</span>
+            {p.state === "connected" && <Badge tone="navy">カレンダー連携</Badge>}
+            {p.state === "manual" && <Badge tone="navy">手動入力</Badge>}
+            {p.state === "unconnected" && <Badge tone="outline">未登録</Badge>}
+            {p.state === "unreadable" && <Badge tone="amber">読み込めない</Badge>}
+            {p.state === "declined" && <Badge tone="muted">不参加</Badge>}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
   const me = isClient && profile ? participants.find((p) => p.name === profile.name) : undefined;
 
   return (
@@ -293,6 +311,8 @@ export default function MeetingPage() {
               </p>
             )}
 
+            {participantsSection}
+
             {preview && (
               <section className="mt-6">
                 <h2 className="text-ink text-sm font-bold md:text-base">今の時点の候補</h2>
@@ -331,24 +351,8 @@ export default function MeetingPage() {
           <GuestsSection meetingId={m.id} onChange={async () => setDetail(await fetchDetail())} />
         )}
 
-        {/* 決定後は「参加できる／できない」の 2 列が参加者一覧を兼ねる */}
-        {!(m.status === "confirmed" && m.attendees) && (
-        <section className="mt-8">
-          <h2 className="text-ink mb-3 text-sm font-bold md:text-base">参加者（{participants.length}人）</h2>
-          <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
-            {participants.map((p) => (
-              <li key={p.name} className="border-line flex items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2.5">
-                <span className="text-ink truncate text-sm">{label(p.name)}</span>
-                {p.state === "connected" && <Badge tone="navy">カレンダー連携</Badge>}
-                {p.state === "manual" && <Badge tone="navy">手動入力</Badge>}
-                {p.state === "unconnected" && <Badge tone="outline">未登録</Badge>}
-                {p.state === "unreadable" && <Badge tone="amber">読み込めない</Badge>}
-                {p.state === "declined" && <Badge tone="muted">不参加</Badge>}
-              </li>
-            ))}
-          </ul>
-        </section>
-        )}
+        {/* 募集中は「今の時点の候補」の上に出す。決定後は「参加できる／できない」の列が参加者一覧を兼ねる */}
+        {m.status !== "open" && !(m.status === "confirmed" && m.attendees) && participantsSection}
       </div>
     </div>
   );
