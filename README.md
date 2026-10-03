@@ -200,6 +200,7 @@ app/
   api/cron/settle-meetings    締切を過ぎた会議を決める（pg_cron から 5 分おき）
   api/meetings/[id]/entry     この会議の予定（手動）の読み書き
   api/meetings/[id]/rsvp      決まった会議への参加登録
+  api/meetings/[id]/alternatives  決まった時間のほかに全員が参加できる時間
   api/weekly                  毎週の予定（手動）の読み書き
   api/schedule/members        予定を登録済み（カレンダーか毎週の予定）の人の名前
 components/
@@ -247,7 +248,8 @@ tests/                        npm test（node --test）
   下の層での見え方を薄く重ねて出す）。「不参加にする」を押した人は計算から外れる（A が 1 減る）。
   決定後は日時とカレンダー登録の導線、「参加する／参加をやめる」（メンバーなら参加者に選ばれていなくても
   押せる。会議が終わるまで。`meeting_rsvps` に 1 人 1 行で記録し、決定時の出欠に上書きして表示。
-  出欠が変わったら Discord に短く流す）（`CalendarLinks` を会議の長さで使う）
+  出欠が変わったら Discord に短く流す）。その下に「ほかに全員が参加できる時間」（決まった時間を除き、今のカレンダーで
+  計算し直す。`api/meetings/[id]/alternatives` を会議ページ本体とは別に読み込む）（`CalendarLinks` を会議の長さで使う）
 
 決め方（`lib/server/meetings.ts` の `settle`）：
 

@@ -131,3 +131,26 @@ export function findSlots(q: SlotQuery): SlotResult {
   }
   return { total, available, windows };
 }
+
+/**
+ * 時間帯の一覧から、決まった会議の時間（start〜end）を除く。
+ * 残りが会議の長さに足りない切れ端は捨てる（決定以外の候補を出すとき用）。
+ */
+export function excludeSlot(
+  windows: SlotWindow[],
+  start: number,
+  end: number,
+  durationMin: number,
+): SlotWindow[] {
+  const duration = durationMin * MINUTE;
+  return windows
+    .flatMap((w) =>
+      w.end <= start || w.start >= end
+        ? [w]
+        : [
+            { start: w.start, end: start },
+            { start: end, end: w.end },
+          ],
+    )
+    .filter((w) => w.end - w.start >= duration);
+}

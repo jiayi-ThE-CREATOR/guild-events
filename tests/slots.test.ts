@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { findSlots, freeMembers, jstMidnight, type Busy } from "../lib/slots.ts";
+import { excludeSlot, findSlots, freeMembers, jstMidnight, type Busy } from "../lib/slots.ts";
 
 const H = 60 * 60 * 1000;
 /** 2026-09-28（月）の日本時間 h 時 */
@@ -100,4 +100,22 @@ test("freeMembers はその時間に予定が無い人だけを返す（境界�
   };
   assert.deepEqual(freeMembers(members, at(10), at(11)).sort(), ["a"]);
   assert.deepEqual(freeMembers(members, at(11), at(12)).sort(), ["a", "b"]);
+});
+
+test("excludeSlot は決まった時間を除き、会議の長さに足りない切れ端を捨てる", () => {
+  const windows = [
+    { start: at(9), end: at(12) },
+    { start: at(13), end: at(14.5) },
+    { start: at(16), end: at(18) },
+  ];
+  // 13:00〜14:00 に決まった → 13〜14.5 の窓は 14:00〜14:30 しか残らず（1 時間に足りない）消える
+  assert.deepEqual(excludeSlot(windows, at(13), at(14), 60), [
+    { start: at(9), end: at(12) },
+    { start: at(16), end: at(18) },
+  ]);
+  // 10:00〜11:00 に決まった → 9〜10 と 11〜12 に分かれる
+  assert.deepEqual(excludeSlot(windows, at(10), at(11), 60).slice(0, 2), [
+    { start: at(9), end: at(10) },
+    { start: at(11), end: at(12) },
+  ]);
 });

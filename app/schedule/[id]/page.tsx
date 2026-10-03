@@ -184,6 +184,7 @@ export default function MeetingPage() {
               />
             )}
             {m.attendees && <AttendanceLists meeting={m} participants={participants} />}
+            {detail.rsvpOpen && <Alternatives meeting={m} />}
             {!m.attendees && <Excluded names={m.excluded} settled />}
             <CalendarLinks
               event={{
@@ -578,6 +579,64 @@ function RsvpCard({
           参加する
         </button>
       )}
+    </section>
+  );
+}
+
+/**
+ * 決まった時間のほかに、全員が参加できる時間の一覧（日程を動かしたいとき用）。
+ * カレンダーを読むので、ページ本体とは別にあとから読み込む。
+ */
+function Alternatives({ meeting: m }: { meeting: Meeting }) {
+  const [data, setData] = useState<{
+    total: number;
+    windows: { start: number; end: number }[];
+    unconnected: string[];
+    unreadable: string[];
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch(`/api/meetings/${m.id}/alternatives`)
+      .then(async (res) => {
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error);
+        if (alive) setData(json);
+      })
+      .catch((e: Error) => alive && setError(e.message));
+    return () => {
+      alive = false;
+    };
+  }, [m.id]);
+
+  return (
+    <section className="border-line rounded-2xl border bg-white p-4">
+      <h2 className="text-ink text-sm font-bold">ほかに全員が参加できる時間</h2>
+      <p className="text-ink-soft mt-1 text-xs">
+        決まった時間以外で、候補の中から今のカレンダーで計算しています（決定後に入った予定も反映）。
+      </p>
+      {error && <p className="text-amber mt-2 text-xs">{error}</p>}
+      {!data && !error && <p className="text-ink-soft mt-3 text-xs">みんなのカレンダーを確認中…</p>}
+      {data && data.windows.length === 0 && (
+        <p className="text-ink-soft mt-3 text-xs">ほかに全員（{data.total}人）がそろう時間はありません</p>
+      )}
+      {data && data.windows.length > 0 && (
+        <>
+          <ul className="mt-3 space-y-1.5">
+            {data.windows.map((w) => (
+              <li key={w.start} className="text-ink text-sm font-semibold">
+                {fullDateTime(iso(w.start))}〜{timeOnly(iso(w.end))}
+              </li>
+            ))}
+          </ul>
+          <p className="text-ink-soft mt-2 text-[11px]">
+            全員 {data.total}人。各時間帯の中なら、{durationLabel(m.duration_min)}をどこに入れても大丈夫です
+          </p>
+        </>
+      )}
+      {data && <Excluded names={data.unconnected} />}
+      {data && <Excluded names={data.unreadable} unreadable />}
     </section>
   );
 }
