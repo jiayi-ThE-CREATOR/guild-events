@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import NameSelect from "@/components/NameSelect";
 import RangesInput, { jstDate, rangesReady, toCandidateRanges, type RangeRow } from "@/components/RangesInput";
 import PageHeader from "@/components/PageHeader";
+import { btn, Dot, ErrorText, field, Note } from "@/components/ui";
 import { MEETING_DEADLINE_HOURS, hoursLabel } from "@/lib/meetings";
 import { MEMBERS } from "@/lib/members";
 import { loadProfile } from "@/lib/profile";
@@ -108,9 +109,7 @@ function MeetingForm() {
     }
   }
 
-  const field =
-    "border-line focus:border-navy text-ink w-full rounded-xl border bg-white px-3.5 py-3 text-[15px] outline-none";
-  const label = "text-ink mb-1.5 block text-xs font-semibold";
+  const label = "text-ink mb-1 block text-[13px] font-semibold";
   const req = <span className="text-amber ml-0.5">*</span>;
 
   function addGuest() {
@@ -127,7 +126,7 @@ function MeetingForm() {
   return (
     <form
       onSubmit={handleSubmit}
-      className="border-line space-y-5 px-4 pt-4 pb-6 md:rounded-2xl md:border md:bg-white md:p-8"
+      className="border-line space-y-4 px-4 pt-3 pb-8 md:rounded-xl md:border md:bg-white md:p-6"
     >
       <div>
         <label htmlFor="title" className={label}>会議名{req}</label>
@@ -151,30 +150,29 @@ function MeetingForm() {
         <legend className={label}>
           参加者（{participants.size}人）{guests.length === 0 && req}
         </legend>
-        <ul className="grid grid-cols-2 gap-1.5">
+        <ul className="flex flex-wrap gap-1.5">
           {MEMBERS.map((name) => {
             const unconnected = connected !== null && !connected.includes(name);
+            const on = participants.has(name);
             return (
               <li key={name}>
-                <label className="border-line text-ink flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={participants.has(name)}
-                    onChange={() => toggle(name)}
-                  />
-                  <span className="truncate">{name}</span>
-                  {unconnected && (
-                    <span className="text-ink-soft ml-auto shrink-0 text-[10px]">未登録</span>
-                  )}
+                <label
+                  className={`flex cursor-pointer items-center gap-1.5 rounded-full border py-1 pr-3 pl-2.5 text-[13px] ${
+                    on ? "border-navy bg-navy-soft text-navy font-semibold" : "border-line text-ink bg-white"
+                  }`}
+                >
+                  <input type="checkbox" checked={on} onChange={() => toggle(name)} className="sr-only" />
+                  <Dot className={unconnected ? "bg-white border border-ink-soft/50" : "bg-grass"} />
+                  {name}
                 </label>
               </li>
             );
           })}
         </ul>
-        <p className="text-ink-soft mt-1.5 text-[11px]">
-          「未登録」の人は、結果発表までにカレンダーをつなぐか予定を手動で入れないと計算に入りません。
-          外部ゲストを入れる会議なら、メンバーは選ばなくても作れます（主催者も出るなら自分にチェック）。
-        </p>
+        <Note className="mt-1.5">
+          押して選びます。<Dot className="bg-grass" /> 予定登録あり　<Dot className="bg-white border border-ink-soft/50" /> 未登録（結果発表までに登録しないと計算に入りません）。
+          外部ゲストがいれば、メンバーは選ばなくても作れます（主催者も出るなら自分を選ぶ）。
+        </Note>
       </fieldset>
 
       <div>
@@ -195,14 +193,14 @@ function MeetingForm() {
             placeholder="メンバー以外の人の名前"
             className={`${field} min-w-0 flex-1`}
           />
-          <button type="button" onClick={addGuest} disabled={!guestName.trim()} className="border-navy text-navy shrink-0 rounded-xl border px-4 text-sm font-semibold disabled:opacity-40">
+          <button type="button" onClick={addGuest} disabled={!guestName.trim()} className={`${btn.secondary} shrink-0`}>
             追加
           </button>
         </div>
         {guests.length > 0 && (
           <ul className="mt-2 flex flex-wrap gap-1.5">
             {guests.map((g) => (
-              <li key={g} className="bg-navy-soft text-navy flex items-center gap-1 rounded-full py-1 pr-1.5 pl-3 text-xs">
+              <li key={g} className="border-navy bg-navy-soft text-navy flex items-center gap-1 rounded-full border py-1 pr-1.5 pl-3 text-[13px] font-semibold">
                 {g}
                 <button type="button" aria-label={`${g}を外す`} onClick={() => setGuests(guests.filter((x) => x !== g))} className="px-1 text-sm leading-none">
                   ×
@@ -211,9 +209,7 @@ function MeetingForm() {
             ))}
           </ul>
         )}
-        <p className="text-ink-soft mt-1.5 text-[11px]">
-          作成すると一人ずつ招待リンクができます。リンクを相手に送ると、ログイン無しで予定を入れてもらえます。
-        </p>
+        <Note className="mt-1.5">作成すると一人ずつ招待リンクができます。相手に送ると、ログイン無しで予定を入れてもらえます。</Note>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -238,9 +234,7 @@ function MeetingForm() {
       <div>
         <span className={label}>候補（{ranges.length}件）</span>
         <RangesInput ranges={ranges} onChange={setRanges} field={field} />
-        <p className="text-ink-soft mt-1.5 text-[11px]">
-          1 日だけなら、始まりと終わりを同じ日にしてください。結果発表より後の時間の中から、一番早くそろう時間に決まります。
-        </p>
+        <Note className="mt-1.5">1 日だけなら、始まりと終わりを同じ日に。結果発表より後の時間から、一番早くそろう時間に決まります。</Note>
       </div>
 
       <div>
@@ -253,13 +247,9 @@ function MeetingForm() {
         <textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} placeholder="話すこと、準備してほしいことなど" className={field} />
       </div>
 
-      {error && <p className="text-amber bg-amber-soft rounded-xl p-3 text-xs">{error}</p>}
+      {error && <ErrorText>{error}</ErrorText>}
 
-      <button
-        type="submit"
-        disabled={!ready || submitting}
-        className="bg-grass w-full rounded-xl py-3.5 text-[15px] font-bold text-white disabled:opacity-40"
-      >
+      <button type="submit" disabled={!ready || submitting} className={`${btn.primary} w-full py-3`}>
         {submitting ? "作成中…" : "この会議で募集を始める"}
       </button>
     </form>
@@ -276,26 +266,26 @@ function GuestLinks({
 }) {
   const [copied, setCopied] = useState<string | null>(null);
   return (
-    <div className="px-4 pt-4 pb-6 md:rounded-2xl md:border md:border-line md:bg-white md:p-8">
-      <p className="text-grass text-sm font-bold">会議を作りました</p>
-      <h2 className="text-ink mt-1 text-lg font-bold">ゲストの招待リンク</h2>
-      <p className="text-amber bg-amber-soft mt-2 rounded-xl p-3 text-xs">
+    <div className="px-4 pt-3 pb-8 md:rounded-xl md:border md:border-line md:bg-white md:p-6">
+      <p className="text-grass text-[13px] font-bold">会議を作りました</p>
+      <h2 className="text-ink mt-0.5 text-lg font-bold">ゲストの招待リンク</h2>
+      <p className="text-amber bg-amber-soft mt-2 rounded-lg px-3 py-2 text-[13px]">
         リンクはこの画面でしか表示されません。今コピーして、それぞれの相手に送ってください。
         （なくしたら会議ページの「外部ゲスト」で作り直せます）
       </p>
-      <ul className="mt-4 space-y-3">
+      <ul className="mt-3 space-y-2.5">
         {created.guests.map((g) => (
           <li key={g.url}>
-            <p className="text-ink mb-1 text-sm font-semibold">{g.name}</p>
+            <p className="text-ink mb-1 text-[13px] font-semibold">{g.name}</p>
             <div className="flex gap-2">
-              <input readOnly value={g.url} onFocus={(e) => e.target.select()} className="border-line min-w-0 flex-1 rounded-lg border bg-white px-2 py-1.5 text-xs" />
+              <input readOnly value={g.url} onFocus={(e) => e.target.select()} className={`${field} min-w-0 flex-1 text-[13px]`} />
               <button
                 type="button"
                 onClick={async () => {
                   await navigator.clipboard.writeText(g.url);
                   setCopied(g.url);
                 }}
-                className="bg-navy shrink-0 rounded-lg px-3 text-xs font-bold text-white"
+                className={`${btn.primary} shrink-0`}
               >
                 {copied === g.url ? "コピー済み" : "コピー"}
               </button>
@@ -303,7 +293,7 @@ function GuestLinks({
           </li>
         ))}
       </ul>
-      <button type="button" onClick={onDone} className="bg-grass mt-6 w-full rounded-xl py-3.5 text-[15px] font-bold text-white">
+      <button type="button" onClick={onDone} className={`${btn.primary} mt-5 w-full py-3`}>
         コピーしたので会議ページへ
       </button>
     </div>

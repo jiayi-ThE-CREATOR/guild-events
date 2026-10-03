@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Badge } from "@/components/Badge";
+import { btn, ErrorText, Note, Segmented, Tag } from "@/components/ui";
 import { fullDateTime } from "@/lib/format";
 import { durationLabel, type MeetingSummary } from "@/lib/meetings";
 
@@ -41,86 +41,66 @@ export default function MeetingListPage() {
     );
 
   return (
-    <div className="px-4 pt-6 md:mx-auto md:max-w-3xl md:px-0 md:pt-0">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-ink text-2xl font-bold">ミーティング</h1>
-          <p className="text-ink-soft mt-1 text-xs md:text-sm">
-            会議を作ると、結果発表の時刻にみんなのカレンダーから日時が自動で決まります。
-          </p>
+    <div className="px-4 pt-5 pb-10 md:mx-auto md:max-w-3xl md:px-0 md:pt-0">
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-ink text-xl font-bold md:text-2xl">ミーティング</h1>
+          <Note>会議を作ると、結果発表の時刻にみんなの予定から日時が自動で決まります。</Note>
         </div>
-        <Link
-          href="/schedule/new"
-          aria-label="会議を作成"
-          className="bg-navy hover:bg-ink flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition-colors"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              d="M12 5v14M5 12h14"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.4"
-              strokeLinecap="round"
-            />
-          </svg>
+        <Link href="/schedule/new" className={`${btn.primary} shrink-0`}>
+          ＋ 会議を作る
         </Link>
       </div>
 
-      <div className="mt-5 grid grid-cols-2 gap-2">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setTab(t.key)}
-            className={`rounded-xl py-2.5 text-xs font-bold transition-colors md:text-sm ${
-              tab === t.key ? "bg-navy text-white" : "border-line text-ink-soft border bg-white"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="mt-4 flex items-center justify-between gap-2">
+        <Segmented
+          value={tab}
+          onChange={setTab}
+          options={TABS.map((t) => ({
+            value: t.key,
+            label: `${t.label} ${(meetings ?? []).filter((m) => (t.key === "open" ? m.status === "open" : m.status !== "open")).length}`,
+          }))}
+        />
       </div>
 
-      {error && <p className="text-amber bg-amber-soft mt-4 rounded-xl p-3 text-xs">{error}</p>}
-      {!meetings && !error && <p className="text-ink-soft py-16 text-center text-xs">読み込み中…</p>}
+      {error && <div className="mt-3"><ErrorText>{error}</ErrorText></div>}
+      {!meetings && !error && <Note className="py-16 text-center">読み込み中…</Note>}
 
       {meetings && visible.length === 0 && (
-        <p className="border-line text-ink-soft mt-4 rounded-2xl border border-dashed p-6 text-center text-xs">
+        <p className="border-line text-ink-soft mt-3 rounded-lg border border-dashed px-4 py-6 text-center text-sm">
           {tab === "open" ? "募集中の会議はありません" : "決定済みの会議はありません"}
-          <br />
-          <Link href="/schedule/new" className="text-navy mt-1 inline-block underline">
-            会議を作成する
-          </Link>
         </p>
       )}
 
-      <ul className="mt-4 space-y-3 pb-4">
-        {visible.map((m) => (
-          <li key={m.id}>
-            <Link
-              href={`/schedule/${m.id}`}
-              className="border-line block rounded-2xl border bg-white p-4 transition-shadow hover:shadow-sm md:p-5"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <h2 className="text-ink text-sm font-bold md:text-base">{m.title}</h2>
-                {m.status === "open" && <Badge tone="amber">募集中</Badge>}
-                {m.status === "confirmed" && <Badge tone="grass">決定</Badge>}
-                {m.status === "failed" && <Badge tone="muted">不成立</Badge>}
-              </div>
-              <p className="text-ink-soft mt-1 text-xs">
-                {m.status === "confirmed" && m.confirmed_start
-                  ? `${fullDateTime(m.confirmed_start)}〜（${durationLabel(m.duration_min)}）`
-                  : m.status === "open"
-                    ? `${fullDateTime(m.deadline)} に結果発表`
-                    : "そろう時間が見つかりませんでした"}
-              </p>
-              <p className="text-ink-soft mt-1 text-[11px]">
-                主催 {m.organizer}・参加者 {m.participants.length}人
-              </p>
-            </Link>
-          </li>
-        ))}
-      </ul>
+      {visible.length > 0 && (
+        <ul className="border-line divide-line mt-3 divide-y overflow-hidden rounded-lg border bg-white">
+          {visible.map((m) => (
+            <li key={m.id}>
+              <Link href={`/schedule/${m.id}`} className="hover:bg-canvas/60 flex items-center gap-3 px-3.5 py-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    {m.status === "open" && <Tag tone="amber">募集中</Tag>}
+                    {m.status === "confirmed" && <Tag tone="grass">決定</Tag>}
+                    {m.status === "failed" && <Tag tone="muted">不成立</Tag>}
+                    <h2 className="text-ink truncate text-[15px] font-bold">{m.title}</h2>
+                  </div>
+                  <p className="text-ink-soft mt-0.5 truncate text-[13px]">
+                    {m.status === "confirmed" && m.confirmed_start ? (
+                      <span className="text-ink font-semibold">{fullDateTime(m.confirmed_start)}〜</span>
+                    ) : m.status === "open" ? (
+                      <>{fullDateTime(m.deadline)} 結果発表</>
+                    ) : (
+                      "そろう時間なし"
+                    )}
+                    {` · ${durationLabel(m.duration_min)} · 主催 ${m.organizer} · ${m.participants.length}人`}
+                  </p>
+                </div>
+                <span aria-hidden className="text-ink-soft shrink-0 text-lg">›</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

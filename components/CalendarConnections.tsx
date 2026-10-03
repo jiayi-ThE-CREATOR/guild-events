@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { btn, field } from "@/components/ui";
 
 /**
  * マイページの「カレンダー連携」。サービスごとにスイッチを並べ、
@@ -120,23 +121,28 @@ export default function CalendarConnections({
 
   return (
     <section>
-      <h2 className="text-ink mb-1 text-sm font-bold md:text-base">カレンダー連携</h2>
-      <p className="text-ink-soft mb-3 text-xs md:mb-4">
-        オンにしたカレンダーの「空いている時間」だけを日程調整に使います。
-        予定の中身は他のメンバーには見えません（
-        <a href="/privacy" className="text-navy underline">
-          プライバシーポリシー
-        </a>
-        ）。
-      </p>
+      {/* ゲストの招待ページでは、置く側が見出しと説明を持つ */}
+      {!guestToken && (
+        <>
+          <h2 className="text-ink mb-1 text-sm font-bold">カレンダー連携</h2>
+          <p className="text-ink-soft mb-3 text-xs leading-relaxed">
+            オンにしたカレンダーの「空いている時間」だけを日程調整に使います。
+            予定の中身は他のメンバーには見えません（
+            <a href="/privacy" className="text-navy underline">
+              プライバシーポリシー
+            </a>
+            ）。
+          </p>
+        </>
+      )}
 
-      {error && <p className="text-amber bg-amber-soft mb-3 rounded-xl p-3 text-xs">{error}</p>}
-      {notice && <p className="text-grass bg-grass-soft mb-3 rounded-xl p-3 text-xs">{notice}</p>}
+      {error && <p className="text-amber bg-amber-soft mb-3 rounded-lg px-3 py-2 text-[13px]">{error}</p>}
+      {notice && <p className="text-grass bg-grass-soft mb-3 rounded-lg px-3 py-2 text-[13px]">{notice}</p>}
 
-      {!sources && !error && <p className="text-ink-soft py-4 text-center text-xs">読み込み中…</p>}
+      {!sources && !error && <p className="text-ink-soft py-4 text-center text-[13px]">読み込み中…</p>}
 
       {sources && (
-        <ul className="border-line divide-line divide-y rounded-2xl border bg-white">
+        <ul className="border-line divide-line divide-y rounded-xl border bg-white">
           <Row
             title="Google カレンダー"
             on={google.length > 0}
@@ -160,7 +166,7 @@ export default function CalendarConnections({
                     )
                   }
                 />
-                <button type="button" onClick={connectGoogle} className="text-navy mt-2 text-xs underline">
+                <button type="button" onClick={connectGoogle} className="text-navy mt-1.5 text-[13px] font-semibold hover:underline">
                   ＋ 別の Google アカウントも追加
                 </button>
               </>
@@ -214,11 +220,11 @@ function Row({
   children?: React.ReactNode;
 }) {
   return (
-    <li className="p-3.5 md:p-5">
+    <li className="px-3.5 py-3">
       <div className="flex items-center justify-between gap-3">
         <span className={`text-sm font-semibold ${disabled ? "text-ink-soft" : "text-ink"}`}>
           {title}
-          {note && <span className="text-ink-soft ml-2 text-[11px] font-normal">{note}</span>}
+          {note && <span className="text-ink-soft ml-2 text-xs font-normal">{note}</span>}
         </span>
         <button
           type="button"
@@ -248,7 +254,7 @@ function Labels({ items, onRemove }: { items: Source[]; onRemove?: (s: Source) =
   return (
     <ul className="mt-2 space-y-1">
       {items.map((s) => (
-        <li key={s.id} className="text-ink-soft flex items-center justify-between gap-2 text-xs">
+        <li key={s.id} className="text-ink-soft flex items-center justify-between gap-2 text-[13px]">
           <span className="truncate">✓ {s.label}</span>
           {onRemove && (
             <button type="button" onClick={() => onRemove(s)} className="shrink-0 underline">
@@ -290,7 +296,7 @@ function IcsForm({ who, onAdded }: { who: Who; onAdded: () => Promise<void> }) {
 
   return (
     <div className="mt-3">
-      <details className="text-ink-soft mb-2 text-xs">
+      <details className="text-ink-soft mb-2 text-[13px]">
         <summary className="text-navy cursor-pointer">リンクの取り方</summary>
         <ol className="mt-2 list-decimal space-y-1 pl-5">
           <li>iPhone の「カレンダー」アプリを開き、下の「カレンダー」をタップ</li>
@@ -311,17 +317,17 @@ function IcsForm({ who, onAdded }: { who: Who; onAdded: () => Promise<void> }) {
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="webcal://p00-caldav.icloud.com/…"
-          className="border-line focus:border-navy min-w-0 flex-1 rounded-xl border bg-white px-3 py-2.5 text-sm outline-none"
+          className={`${field} min-w-0 flex-1`}
         />
         <button
           type="submit"
           disabled={!url.trim() || saving}
-          className="bg-navy shrink-0 rounded-xl px-4 text-sm font-bold text-white disabled:opacity-40"
+          className={`${btn.primary} shrink-0`}
         >
           {saving ? "確認中…" : "追加"}
         </button>
       </form>
-      {message && <p className="text-amber mt-2 text-xs">{message}</p>}
+      {message && <p className="text-amber mt-2 text-[13px]">{message}</p>}
     </div>
   );
 }
@@ -333,8 +339,6 @@ function CaldavForm({ who, onAdded }: { who: Who; onAdded: () => Promise<void> }
   const [password, setPassword] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const field =
-    "border-line focus:border-navy w-full rounded-xl border bg-white px-3 py-2.5 text-sm outline-none";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -362,7 +366,7 @@ function CaldavForm({ who, onAdded }: { who: Who; onAdded: () => Promise<void> }
 
   return (
     <div className="mt-3">
-      <details className="text-ink-soft mb-2 text-xs">
+      <details className="text-ink-soft mb-2 text-[13px]">
         <summary className="text-navy cursor-pointer">設定の取り方</summary>
         <ol className="mt-2 list-decimal space-y-1 pl-5">
           <li>Lark のパソコン版で、左上のプロフィール写真 →「設定」</li>
@@ -381,12 +385,12 @@ function CaldavForm({ who, onAdded }: { who: Who; onAdded: () => Promise<void> }
         <button
           type="submit"
           disabled={!server.trim() || !username.trim() || !password || saving}
-          className="bg-navy w-full rounded-xl py-2.5 text-sm font-bold text-white disabled:opacity-40"
+          className={`${btn.primary} w-full`}
         >
           {saving ? "確認中…" : "つなぐ"}
         </button>
       </form>
-      {message && <p className="text-amber mt-2 text-xs">{message}</p>}
+      {message && <p className="text-amber mt-2 text-[13px]">{message}</p>}
     </div>
   );
 }

@@ -56,8 +56,8 @@ export default function WeeklySchedule({ member }: { member: string }) {
         授業やバイトなど、毎週決まっている予定を入れておくと全部の会議に使われます。
         カレンダーを使っていない人はここだけでもOK。カレンダーと重なったらこちらが優先です。
       </p>
-      {error && <p className="text-amber bg-amber-soft rounded-xl p-3 text-xs">{error}</p>}
-      {!saved && !error && <p className="text-ink-soft py-4 text-center text-xs">読み込み中…</p>}
+      {error && <p className="text-amber bg-amber-soft rounded-lg px-3 py-2 text-[13px]">{error}</p>}
+      {!saved && !error && <p className="text-ink-soft py-4 text-center text-[13px]">読み込み中…</p>}
       {saved && (
         <ScheduleEditor
           // 名前を切り替えたら入力をまっさらにする

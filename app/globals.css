@@ -32,6 +32,15 @@ body {
   font-family: var(--font-sans);
 }
 
+/* キーボード操作のときだけ、控えめな枠を出す（ブラウザ既定の黒い太枠を出さない） */
+:focus-visible {
+  outline: 2px solid rgb(30 42 90 / 0.3);
+  outline-offset: 2px;
+}
+summary:focus:not(:focus-visible) {
+  outline: none;
+}
+
 /* イベントのカバー画像枠（画像データを持たないため装飾のみ） */
 .cover-stripes {
   background-color: #e7ecf9;

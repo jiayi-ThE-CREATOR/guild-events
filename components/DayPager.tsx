@@ -29,13 +29,13 @@ export default function DayPager({
   onChange: (page: number) => void;
 }) {
   if (pages <= 1) return null;
-  const button = "border-line text-ink rounded-lg border bg-white px-3 py-1.5 text-xs font-semibold disabled:opacity-30";
+  const button = "border-line text-ink hover:bg-canvas rounded-lg border bg-white px-3 py-1.5 text-[13px] font-semibold disabled:opacity-30";
   return (
     <div className="mb-2 flex items-center justify-between gap-2">
       <button type="button" disabled={page === 0} onClick={() => onChange(page - 1)} className={button}>
         ◀ 前へ
       </button>
-      <span className="text-ink-soft text-xs">
+      <span className="text-ink-soft text-[13px]">
         {label}（{page + 1}/{pages}）
       </span>
       <button type="button" disabled={page >= pages - 1} onClick={() => onChange(page + 1)} className={button}>

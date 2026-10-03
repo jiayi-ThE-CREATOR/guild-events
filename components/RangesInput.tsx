@@ -57,7 +57,7 @@ export default function RangesInput({
           const set = (patch: Partial<RangeRow>) =>
             onChange(ranges.map((x, j) => (j === i ? { ...x, ...patch } : x)));
           return (
-            <li key={i} className="border-line rounded-xl border bg-white p-2.5">
+            <li key={i} className="border-line rounded-lg border bg-white p-2">
               <div className="flex items-center gap-1.5">
                 <input aria-label={`候補${i + 1} いつから`} type="date" value={r.fromDate} min={jstDate(0)} onChange={(e) => set({ fromDate: e.target.value, toDate: r.toDate < e.target.value ? e.target.value : r.toDate })} className={`${field} min-w-0 flex-1`} required />
                 <span className="text-ink-soft text-xs">〜</span>
@@ -85,7 +85,7 @@ export default function RangesInput({
         <button
           type="button"
           onClick={() => onChange([...ranges, { ...ranges[ranges.length - 1] }])}
-          className="text-navy mt-2 text-xs font-semibold"
+          className="text-navy mt-1.5 text-[13px] font-semibold hover:underline"
         >
           ＋ 候補を追加
         </button>

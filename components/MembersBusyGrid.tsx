@@ -87,22 +87,15 @@ export default function MembersBusyGrid({
   }
 
   return (
-    <section className="border-line rounded-2xl border bg-white p-4">
-      <h2 className="text-ink text-sm font-bold">みんなの予定</h2>
-      <p className="text-ink-soft mt-1 text-xs">
-        マスの数字はその 30 分に予定がある人数です（予定の中身は出ません）。マスを押すと誰かが出ます。
-        今のカレンダーと手動の予定で計算しています。
-      </p>
-      {error && <p className="text-amber mt-2 text-xs">{error}</p>}
-      {!data && !error && <p className="text-ink-soft mt-3 text-xs">みんなのカレンダーを確認中…</p>}
+    <div>
+      {error && <p className="text-amber text-[13px]">{error}</p>}
+      {!data && !error && <p className="text-ink-soft py-6 text-center text-[13px]">みんなのカレンダーを確認中…</p>}
 
       {data && (
         <>
-          <div className="mt-3">
-            <DayPager page={page} pages={pageCount(days.length)} label={pageLabel} onChange={setPage} />
-          </div>
-          <div className="border-line overflow-x-auto rounded-xl border">
-            <table className="w-full border-collapse select-none text-[10px]">
+          <DayPager page={page} pages={pageCount(days.length)} label={pageLabel} onChange={setPage} />
+          <div className="border-line overflow-x-auto rounded-lg border bg-white">
+            <table className="w-full border-collapse select-none text-[11px]">
               <thead>
                 <tr>
                   <th className="w-10" />
@@ -146,16 +139,17 @@ export default function MembersBusyGrid({
             </table>
           </div>
 
-          <div className="text-ink-soft mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+          <div className="text-ink-soft mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
             <span className="flex items-center gap-1"><span className="border-line inline-block h-3 w-3 rounded-sm border bg-white" />全員空き</span>
             <span className="flex items-center gap-1"><span className="bg-kyoto/20 inline-block h-3 w-3 rounded-sm" />少し</span>
             <span className="flex items-center gap-1"><span className="bg-kyoto/45 inline-block h-3 w-3 rounded-sm" />半分以上</span>
             <span className="flex items-center gap-1"><span className="bg-kyoto/80 inline-block h-3 w-3 rounded-sm" />全員予定あり</span>
             {decided && <span className="flex items-center gap-1"><span className="ring-grass inline-block h-3 w-3 rounded-sm ring-2 ring-inset" />決まった時間</span>}
+            <span>数字＝予定がある人数。マスを押すと誰か出ます（予定の中身は出ません）</span>
           </div>
 
           {selected !== null && (
-            <div className="bg-canvas mt-3 rounded-xl p-3 text-xs">
+            <div className="bg-canvas mt-2 rounded-lg px-3 py-2 text-[13px]">
               <p className="text-ink font-bold">
                 {fullDateTime(new Date(selected).toISOString())}〜{timeOnly(new Date(selected + CELL_MS).toISOString())}
               </p>
@@ -170,17 +164,17 @@ export default function MembersBusyGrid({
           )}
 
           {data.unconnected.length > 0 && (
-            <p className="text-ink-soft mt-2 text-[11px]">
+            <p className="text-ink-soft mt-2 text-xs">
               予定未登録で表に入っていない人：{data.unconnected.map(name).join("、")}
             </p>
           )}
           {data.unreadable.length > 0 && (
-            <p className="text-ink-soft mt-1 text-[11px]">
+            <p className="text-ink-soft mt-1 text-xs">
               カレンダーを読み込めず表に入っていない人：{data.unreadable.map(name).join("、")}
             </p>
           )}
         </>
       )}
-    </section>
+    </div>
   );
 }

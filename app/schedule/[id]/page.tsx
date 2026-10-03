@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { Badge } from "@/components/Badge";
-import CalendarLinks from "@/components/CalendarLinks";
-import PageHeader from "@/components/PageHeader";
 import MeetingEntry from "@/components/MeetingEntry";
 import MembersBusyGrid from "@/components/MembersBusyGrid";
+import PageHeader from "@/components/PageHeader";
 import RangesInput, { fromCandidateRanges, rangesReady, toCandidateRanges, type RangeRow } from "@/components/RangesInput";
+import { btn, Dot, DOT, Dropdown, ErrorText, field, Menu, Note, Panel, SectionTitle, Segmented, Tag } from "@/components/ui";
+import { downloadIcs, googleCalendarUrl, outlookLiveUrl, outlookOffice365Url } from "@/lib/calendar";
 import { fullDateTime, timeOnly } from "@/lib/format";
 import { labelOf } from "@/lib/guests";
 import { durationLabel, hoursLabel, MEETING_DEADLINE_HOURS, type ParticipantState } from "@/lib/meetings";
@@ -18,8 +18,11 @@ import type { SlotResult } from "@/lib/slots";
 import { useIsClient } from "@/lib/useIsClient";
 
 /**
- * 会議の詳細。募集中は「今のカレンダーで決めたらどうなるか」の候補と、
- * 参加者本人の「不参加にする」ボタンを出す。決定後は日時とカレンダー登録の導線。
+ * 会議の詳細（メンバー向け）。
+ * 上から：見出し（状態・主催・会議名・要点 1 行・⋯メニュー）→ 開いた操作パネル →
+ * 募集中は「あなた」の 1 行と、候補（リスト／表）・参加者の 2 段組み。
+ * 決定後は決まった日時と出欠を 1 ブロックにまとめる。
+ * めったに使わない操作（延長・日時の変更・ゲスト）は「⋯」から開くパネルにする。
  */
 
 type Meeting = {
@@ -54,7 +57,17 @@ type Detail = {
   labels: Record<string, string>;
 };
 
+type PanelKind = "entry" | "extend" | "reschedule" | "guests";
+
 const iso = (ms: number) => new Date(ms).toISOString();
+
+const STATE_LABEL: Record<ParticipantState, string> = {
+  connected: "カレンダー",
+  manual: "手入力",
+  unconnected: "未登録",
+  unreadable: "読み込めない",
+  declined: "不参加",
+};
 
 export default function MeetingPage() {
   const { id } = useParams<{ id: string }>();
@@ -63,7 +76,8 @@ export default function MeetingPage() {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  // 「ほかに全員が参加できる時間」から押した時間。日時の変更欄に入れる
+  const [panel, setPanel] = useState<PanelKind | null>(null);
+  // 「ほかに全員がそろう時間」から押した時間。日時の変更パネルに入れる
   const [picked, setPicked] = useState<number | null>(null);
 
   const fetchDetail = useCallback(async () => {
@@ -83,37 +97,20 @@ export default function MeetingPage() {
     };
   }, [fetchDetail]);
 
-  async function setAttending(attending: boolean) {
-    if (!profile || saving) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/meetings/${id}/rsvp`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ member: profile.name, attending }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error);
-      setDetail(await fetchDetail());
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  }
+  const refresh = useCallback(async () => setDetail(await fetchDetail()), [fetchDetail]);
 
-  async function setDeclined(declined: boolean) {
-    if (!profile || saving) return;
+  async function post(path: string, body: unknown) {
+    if (saving) return;
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`/api/meetings/${id}/decline`, {
+      const res = await fetch(`/api/meetings/${id}/${path}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ member: profile.name, declined }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error((await res.json()).error);
-      setDetail(await fetchDetail());
+      await refresh();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -123,439 +120,478 @@ export default function MeetingPage() {
 
   if (!detail) {
     return (
-      <div className="md:mx-auto md:max-w-3xl">
+      <div className="md:mx-auto md:max-w-5xl">
         <PageHeader title="会議" />
-        {error ? (
-          <p className="text-amber bg-amber-soft m-4 rounded-xl p-3 text-xs md:mx-0">{error}</p>
-        ) : (
-          <p className="text-ink-soft py-16 text-center text-xs">
-            みんなのカレンダーを確認中…
-          </p>
-        )}
+        <div className="px-4 py-6 md:px-0">
+          {error ? <ErrorText>{error}</ErrorText> : <Note className="py-10 text-center">みんなのカレンダーを確認中…</Note>}
+        </div>
       </div>
     );
   }
 
   const { meeting: m, participants, preview } = detail;
   const label = (key: string) => labelOf(detail.labels, key);
-
-  const participantsSection = (
-    <section className="mt-6">
-      <h2 className="text-ink mb-3 text-sm font-bold md:text-base">参加者（{participants.length}人）</h2>
-      <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
-        {participants.map((p) => (
-          <li key={p.name} className="border-line flex items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2.5">
-            <span className="text-ink truncate text-sm">{label(p.name)}</span>
-            {p.state === "connected" && <Badge tone="navy">カレンダー連携</Badge>}
-            {p.state === "manual" && <Badge tone="navy">手動入力</Badge>}
-            {p.state === "unconnected" && <Badge tone="outline">未登録</Badge>}
-            {p.state === "unreadable" && <Badge tone="amber">読み込めない</Badge>}
-            {p.state === "declined" && <Badge tone="muted">不参加</Badge>}
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
+  const ranges = meetingRanges(m);
   const me = isClient && profile ? participants.find((p) => p.name === profile.name) : undefined;
+  const decided =
+    m.status === "confirmed" && m.confirmed_start
+      ? { start: Date.parse(m.confirmed_start), end: Date.parse(m.confirmed_start) + m.duration_min * 60 * 1000 }
+      : null;
+
+  const menuItems = [
+    ...(m.status === "open" && me && me.state !== "declined" ? [{ label: "予定を手入力する", onClick: () => setPanel("entry") }] : []),
+    ...(m.status === "confirmed" ? [{ label: "日時を変更する", onClick: () => setPanel("reschedule") }] : []),
+    { label: m.status === "open" ? "募集を延長する" : "募集をやり直す", onClick: () => setPanel("extend") },
+    ...(m.status !== "failed" ? [{ label: "外部ゲストを招く・管理", onClick: () => setPanel("guests") }] : []),
+  ];
 
   return (
-    <div className="md:mx-auto md:max-w-3xl">
+    <div className="md:mx-auto md:max-w-5xl">
       <PageHeader title="会議" />
-      <div className="px-4 pt-4 pb-6 md:px-0 md:pt-2">
-        <div className="mb-2">
-          {m.status === "open" && <Badge tone="amber">募集中</Badge>}
-          {m.status === "confirmed" && <Badge tone="grass">決定</Badge>}
-          {m.status === "failed" && <Badge tone="muted">不成立</Badge>}
-        </div>
-        <h1 className="text-ink text-xl leading-snug font-bold md:text-3xl">{m.title}</h1>
-
-        <dl className="border-line mt-4 divide-y divide-[var(--color-line)] rounded-2xl border bg-white text-sm">
-          <Row label="主催">{m.organizer}</Row>
-          <Row label="長さ">{durationLabel(m.duration_min)}</Row>
-          <Row label="候補">
-            {meetingRanges(m).map((r, i) => (
-              <span key={i} className="block">{rangeLabel(r)}</span>
-            ))}
-          </Row>
-          <Row label="結果発表">{fullDateTime(m.deadline)}</Row>
-          {m.location && <Row label="場所">{m.location}</Row>}
-        </dl>
-        {m.description && (
-          <p className="text-ink-soft mt-4 text-sm leading-relaxed whitespace-pre-wrap">{m.description}</p>
-        )}
-
-        {error && <p className="text-amber bg-amber-soft mt-4 rounded-xl p-3 text-xs">{error}</p>}
-
-        {m.status === "confirmed" && m.confirmed_start && (
-          <section className="mt-6 space-y-4">
-            <div className="bg-grass-soft rounded-2xl p-5 text-center">
-              <p className="text-grass text-xs font-bold">この日時に決まりました</p>
-              <p className="text-ink mt-1 text-xl font-bold md:text-2xl">
-                {fullDateTime(m.confirmed_start)}〜
-                {timeOnly(iso(Date.parse(m.confirmed_start) + m.duration_min * 60 * 1000))}
+      <div className="px-4 pt-3 pb-10 md:px-0 md:pt-1">
+        {/* 見出し */}
+        <header className="border-line border-b pb-3">
+          <div className="flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                {m.status === "open" && <Tag tone="amber">募集中</Tag>}
+                {m.status === "confirmed" && <Tag tone="grass">決定</Tag>}
+                {m.status === "failed" && <Tag tone="muted">不成立</Tag>}
+                <span className="text-ink-soft text-[13px]">主催 {m.organizer}</span>
+              </div>
+              <h1 className="text-ink mt-1 text-xl leading-snug font-bold md:text-2xl">{m.title}</h1>
+              <p className="text-ink-soft mt-1 text-[13px] leading-relaxed">
+                {durationLabel(m.duration_min)} · {ranges.map(rangeLabel).join(" / ")}
+                {m.location && ` · ${m.location}`}
+                {m.status === "open" && (
+                  <>
+                    {" · "}
+                    <span className="text-ink font-semibold whitespace-nowrap">{fullDateTime(m.deadline)} 結果発表</span>
+                  </>
+                )}
               </p>
-              <p className="text-ink-soft mt-1 text-xs">
-                {m.attendees
-                  ? `参加者 ${participants.length}人中 ${m.attendees.length}人が参加できます`
-                  : `参加者 ${participants.length}人中 ${m.confirmed_available}人が参加できます`}
-              </p>
+              {m.description && <p className="text-ink mt-1.5 text-sm leading-relaxed whitespace-pre-wrap">{m.description}</p>}
             </div>
-            {isClient && m.attendees && detail.rsvpOpen && (
-              <RsvpCard
-                meeting={m}
-                member={profile?.name ?? null}
-                saving={saving}
-                onChange={setAttending}
-              />
-            )}
-            {m.attendees && <AttendanceLists meeting={m} participants={participants} label={label} />}
-            {detail.rsvpOpen && <Alternatives meeting={m} onPick={setPicked} />}
-            <RescheduleSection
+            <Menu items={menuItems} />
+          </div>
+        </header>
+
+        {/* 「⋯」などから開いた操作 */}
+        {panel === "entry" && profile && (
+          <Panel title="この会議の予定を手入力" onClose={() => setPanel(null)}>
+            <MeetingEntry
+              ranges={ranges}
+              loadUrl={`/api/meetings/${m.id}/entry?member=${encodeURIComponent(profile.name)}`}
+              saveUrl={`/api/meetings/${m.id}/entry`}
+              saveBody={{ member: profile.name }}
+              onSaved={refresh}
+            />
+          </Panel>
+        )}
+        {panel === "extend" && (
+          <Panel title={m.status === "open" ? "募集を延長する" : "募集をやり直す"} onClose={() => setPanel(null)}>
+            <ExtendForm meeting={m} onDone={async () => { setPanel(null); await refresh(); }} />
+          </Panel>
+        )}
+        {panel === "reschedule" && m.status === "confirmed" && (
+          <Panel title="日時を変更する" onClose={() => { setPanel(null); setPicked(null); }}>
+            <RescheduleForm
               key={picked ?? "none"}
               meeting={m}
               picked={picked}
-              onDone={async () => {
-                setPicked(null);
-                setDetail(await fetchDetail());
-              }}
+              onDone={async () => { setPanel(null); setPicked(null); await refresh(); }}
             />
-            {!m.attendees && <Excluded names={m.excluded.map(label)} settled />}
-            <CalendarLinks
-              event={{
-                id: m.id,
-                title: m.title,
-                description: m.description,
-                location: m.location,
-                event_date: m.confirmed_start,
-                duration_min: m.duration_min,
-              }}
-            />
-          </section>
+          </Panel>
+        )}
+        {panel === "guests" && (
+          <Panel title="外部ゲスト" onClose={() => setPanel(null)}>
+            <GuestsPanel meetingId={m.id} onChange={refresh} />
+          </Panel>
         )}
 
-        {m.status === "failed" && (
-          <section className="mt-6">
-            <p className="border-line text-ink-soft rounded-2xl border border-dashed p-6 text-center text-xs leading-relaxed">
-              候補の範囲の中に、{Math.max((m.confirmed_total ?? 1) - 1, 1)}人以上がそろう時間がありませんでした。
-              <br />
-              範囲や時間帯を広げて、会議を作り直してください。
-              <br />
-              <Link href="/schedule/new" className="text-navy mt-2 inline-block underline">
-                会議を作成する
-              </Link>
-            </p>
-            <Excluded names={m.excluded.map(label)} settled />
-            <Excluded names={(m.unreadable ?? []).map(label)} settled unreadable />
-          </section>
-        )}
+        {error && <div className="mt-3"><ErrorText>{error}</ErrorText></div>}
 
         {m.status === "open" && (
           <>
-            {me && (
-              <section className="border-line mt-6 rounded-2xl border bg-white p-4">
-                {me.state === "declined" ? (
-                  <>
-                    <p className="text-ink text-sm font-bold">「不参加」で回答しています</p>
-                    <p className="text-ink-soft mt-1 text-xs">この会議の日時の計算には入りません。</p>
-                    <button type="button" disabled={saving} onClick={() => setDeclined(false)} className="border-line text-ink mt-3 w-full rounded-xl border py-2.5 text-sm font-semibold disabled:opacity-40">
-                      やっぱり参加できる
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-ink text-sm font-bold">
-                      {me.state === "connected"
-                        ? "あなたのカレンダーから空き時間を読んでいます"
-                        : me.state === "manual"
-                          ? "手動で入れた予定で計算しています"
-                          : me.state === "unreadable"
-                            ? "あなたのカレンダーを読み込めていません"
-                            : "まだ予定が登録されていません"}
-                    </p>
-                    <p className="text-ink-soft mt-1 text-xs">
-                      {me.state === "connected" || me.state === "manual" ? (
-                        "何もしなくて大丈夫です。カレンダーと違う予定があれば下の「この会議の予定」で直せます。どの日時でも出られない場合は「不参加にする」を押してください。"
-                      ) : me.state === "unreadable" ? (
-                        <>
-                          <Link href="/mypage" className="text-navy underline">マイページ</Link>
-                          で一度オフにしてからつなぎ直してください（Google は同意画面のチェックをすべてオンに）。
-                        </>
-                      ) : (
-                        <>
-                          <Link href="/mypage" className="text-navy underline">マイページ</Link>
-                          でカレンダーをつなぐか毎週の予定を入れる、または下の「この会議の予定」を塗ると、結果発表のときに計算に入ります。
-                        </>
-                      )}
-                    </p>
-                    <button type="button" disabled={saving} onClick={() => setDeclined(true)} className="border-line text-ink-soft hover:border-ink-soft mt-3 w-full rounded-xl border py-2.5 text-sm font-semibold transition-colors disabled:opacity-40">
-                      不参加にする
-                    </button>
-                  </>
-                )}
-              </section>
-            )}
-            {me && me.state !== "declined" && profile && (
-              <MeetingEntry
-                ranges={meetingRanges(m)}
-                loadUrl={`/api/meetings/${m.id}/entry?member=${encodeURIComponent(profile.name)}`}
-                saveUrl={`/api/meetings/${m.id}/entry`}
-                saveBody={{ member: profile.name }}
-                onSaved={async () => setDetail(await fetchDetail())}
-              />
-            )}
-            {isClient && !profile && (
-              <p className="text-ink-soft mt-6 text-xs">
-                参加者の方は{" "}
-                <Link href="/mypage" className="text-navy underline">マイページ</Link>{" "}
-                で名前を選ぶと「不参加にする」を押せます。
-              </p>
-            )}
-
-            {participantsSection}
-
-            {preview && (
-              <section className="mt-6">
-                <h2 className="text-ink text-sm font-bold md:text-base">今の時点の候補</h2>
-                <p className="text-ink-soft mt-1 mb-3 text-xs">
-                  結果発表（{fullDateTime(m.deadline)}）のときに、みんなの最新のカレンダーで
-                  もう一度計算し、一番早い時間に決まります。
-                </p>
-                <Preview result={preview.result} durationMin={m.duration_min} />
-                <Excluded names={preview.unconnected.map(label)} />
-                <Excluded names={preview.unreadable.map(label)} unreadable />
-              </section>
-            )}
+            <YouBar
+              me={me}
+              hasProfile={isClient && !!profile}
+              saving={saving}
+              onEntry={() => setPanel(panel === "entry" ? null : "entry")}
+              onDecline={(declined) => profile && post("decline", { member: profile.name, declined })}
+            />
+            <div className="mt-4 grid gap-6 md:grid-cols-[1fr_320px]">
+              <Candidates meeting={m} preview={preview} label={label} />
+              <aside className="md:border-line md:border-l md:pl-6">
+                <People participants={participants} label={label} onGuests={() => setPanel("guests")} />
+              </aside>
+            </div>
           </>
         )}
 
-        {m.status !== "failed" && (
-          <div className="mt-8">
-            <MembersBusyGrid
-              meetingId={m.id}
-              ranges={meetingRanges(m)}
-              decided={
-                m.status === "confirmed" && m.confirmed_start
-                  ? {
-                      start: Date.parse(m.confirmed_start),
-                      end: Date.parse(m.confirmed_start) + m.duration_min * 60 * 1000,
-                    }
-                  : null
-              }
-            />
-          </div>
+        {m.status === "confirmed" && m.confirmed_start && decided && (
+          <ConfirmedBlock
+            meeting={m}
+            participants={participants}
+            label={label}
+            rsvpOpen={detail.rsvpOpen}
+            member={isClient && profile ? profile.name : null}
+            saving={saving}
+            onRsvp={(attending) => profile && post("rsvp", { member: profile.name, attending })}
+            onPick={(start) => {
+              setPicked(start);
+              setPanel("reschedule");
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            decided={decided}
+          />
         )}
 
-        <ExtendSection meeting={m} onDone={async () => setDetail(await fetchDetail())} />
-
-        {m.status !== "failed" && (
-          <GuestsSection meetingId={m.id} onChange={async () => setDetail(await fetchDetail())} />
+        {m.status === "failed" && (
+          <>
+            <div className="border-line mt-4 rounded-xl border border-dashed px-4 py-5 text-center">
+              <p className="text-ink text-sm">
+                候補の中に、{Math.max((m.confirmed_total ?? 1) - 1, 1)}人以上がそろう時間がありませんでした。
+              </p>
+              <button type="button" onClick={() => setPanel("extend")} className={`${btn.secondary} mt-3`}>
+                候補を変えて募集をやり直す
+              </button>
+            </div>
+            <div className="mt-6">
+              <People participants={participants} label={label} />
+            </div>
+          </>
         )}
-
-        {/* 募集中は「今の時点の候補」の上に出す。決定後は「参加できる／できない」の列が参加者一覧を兼ねる */}
-        {m.status !== "open" && !(m.status === "confirmed" && m.attendees) && participantsSection}
       </div>
     </div>
   );
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+/* ───────── 募集中 ───────── */
+
+/** 自分の状態を 1 行で。操作はボタンで横に並べる */
+function YouBar({
+  me,
+  hasProfile,
+  saving,
+  onEntry,
+  onDecline,
+}: {
+  me: { name: string; state: ParticipantState } | undefined;
+  hasProfile: boolean;
+  saving: boolean;
+  onEntry: () => void;
+  onDecline: (declined: boolean) => void;
+}) {
+  if (!hasProfile) {
+    return (
+      <Note className="mt-3">
+        参加者の方は <Link href="/mypage" className="text-navy underline">マイページ</Link> で名前を選ぶと、予定の手入力や「不参加」ができます。
+      </Note>
+    );
+  }
+  if (!me) return null;
+  const text =
+    me.state === "declined"
+      ? "「不参加」で回答しています"
+      : me.state === "connected"
+        ? "カレンダーから自動で読んでいます"
+        : me.state === "manual"
+          ? "手入力した予定で計算しています"
+          : me.state === "unreadable"
+            ? "カレンダーを読み込めていません"
+            : "予定が登録されていません";
   return (
-    <div className="flex gap-4 px-4 py-3">
-      <dt className="text-ink-soft w-16 shrink-0 text-xs leading-5">{label}</dt>
-      <dd className="text-ink min-w-0 flex-1 leading-5">{children}</dd>
+    <div className="bg-navy-soft/60 mt-3 rounded-xl px-3.5 py-2.5">
+      <div className="flex flex-col gap-2 md:flex-row md:items-center">
+        <p className="text-ink flex min-w-0 flex-1 items-center gap-2 text-sm">
+          <Dot className={DOT[me.state]} />
+          <span>
+            あなた：<b>{text}</b>
+          </span>
+        </p>
+        <div className="flex gap-2">
+          {me.state === "declined" ? (
+            <button type="button" disabled={saving} onClick={() => onDecline(false)} className={btn.secondary}>
+              やっぱり参加できる
+            </button>
+          ) : (
+            <>
+              <button type="button" onClick={onEntry} className={btn.secondary}>予定を手入力</button>
+              <button type="button" disabled={saving} onClick={() => onDecline(true)} className={btn.secondary}>不参加にする</button>
+            </>
+          )}
+        </div>
+      </div>
+      {(me.state === "unconnected" || me.state === "unreadable") && (
+        <Note className="mt-1.5">
+          {me.state === "unreadable"
+            ? "マイページでカレンダーを一度オフにして、つなぎ直してください（Google は同意画面のチェックをすべてオンに）。"
+            : "マイページでカレンダーをつなぐか毎週の予定を入れる、または「予定を手入力」で塗ると計算に入ります。"}
+        </Note>
+      )}
     </div>
   );
 }
 
-/** 「今の時点の候補」は、これより多いと残りを折りたたむ */
+/** 「今の時点の候補」をリストか表で。リストは 5 件を超えたら折りたたむ */
 const PREVIEW_LIMIT = 5;
 
-function Preview({ result, durationMin }: { result: SlotResult; durationMin: number }) {
+function Candidates({
+  meeting: m,
+  preview,
+  label,
+}: {
+  meeting: Meeting;
+  preview: Detail["preview"];
+  label: (k: string) => string;
+}) {
+  const [view, setView] = useState<"list" | "table">("list");
   const [showAll, setShowAll] = useState(false);
-  if (result.total === 0) {
-    return (
-      <p className="border-line text-ink-soft rounded-2xl border border-dashed p-5 text-center text-xs">
-        カレンダーをつないでいる参加者がまだいません
-      </p>
-    );
-  }
-  if (result.available === null || result.windows.length === 0) {
-    return (
-      <p className="border-line text-ink-soft rounded-2xl border border-dashed p-5 text-center text-xs">
-        今のところ、{result.total}人中 {Math.max(result.total - 1, 1)}人以上がそろう時間はありません
-      </p>
-    );
-  }
-  const everyone = result.available === result.total;
+  const result = preview?.result;
+  const summary = !result
+    ? undefined
+    : result.total === 0
+      ? "予定が登録された人がまだいません"
+      : result.available === null || result.windows.length === 0
+        ? "そろう時間なし"
+        : result.available === result.total
+          ? `全員そろう ${result.windows.length}件`
+          : `${result.available}/${result.total}人 ${result.windows.length}件`;
+
   return (
-    <>
-      <p className={`mb-2 rounded-xl p-3 text-xs ${everyone ? "bg-grass-soft text-grass" : "bg-amber-soft text-amber"}`}>
-        {everyone
-          ? `全員（${result.total}人）が参加できる時間があります`
-          : `全員はそろいません。${result.total}人中 ${result.available}人が参加できる時間です`}
-      </p>
-      <ul className="space-y-2">
-        {(showAll ? result.windows : result.windows.slice(0, PREVIEW_LIMIT)).map((w, i) => (
-          <li key={w.start} className="border-line text-ink flex items-center justify-between gap-2 rounded-2xl border bg-white p-3.5 text-sm font-semibold">
-            <span>
-              {fullDateTime(iso(w.start))}〜{timeOnly(iso(w.end))}
+    <section>
+      <SectionTitle
+        title="今の時点の候補"
+        meta={summary}
+        right={
+          <Segmented
+            value={view}
+            onChange={setView}
+            options={[
+              { value: "list", label: "リスト" },
+              { value: "table", label: "表" },
+            ]}
+          />
+        }
+      />
+      {view === "table" ? (
+        <MembersBusyGrid meetingId={m.id} ranges={meetingRanges(m)} />
+      ) : result && result.available !== null && result.windows.length > 0 ? (
+        <>
+          {result.available !== result.total && (
+            <p className="text-amber mb-1.5 text-[13px]">全員はそろいません。1人欠けの時間を出しています。</p>
+          )}
+          <ul className="border-line divide-line divide-y overflow-hidden rounded-lg border bg-white">
+            {(showAll ? result.windows : result.windows.slice(0, PREVIEW_LIMIT)).map((w, i) => (
+              <TimeRow key={w.start} start={w.start} end={w.end} right={i === 0 && <Tag tone="grass">今なら決まる</Tag>} />
+            ))}
+          </ul>
+          {result.windows.length > PREVIEW_LIMIT && (
+            <button type="button" onClick={() => setShowAll(!showAll)} className={`${btn.text} mt-1.5`}>
+              {showAll ? "閉じる" : `ほか ${result.windows.length - PREVIEW_LIMIT}件を表示`}
+            </button>
+          )}
+          <Note className="mt-1">
+            {fullDateTime(m.deadline)} の結果発表で、最新の予定から一番早い時間に決まります。各時間帯の中なら {durationLabel(m.duration_min)} をどこに入れても大丈夫です。
+          </Note>
+        </>
+      ) : (
+        <p className="border-line text-ink-soft rounded-lg border border-dashed px-4 py-5 text-center text-sm">
+          {result && result.total > 0
+            ? `今のところ、${result.total}人中 ${Math.max(result.total - 1, 1)}人以上がそろう時間はありません`
+            : "予定が登録された参加者がまだいません"}
+        </p>
+      )}
+      {preview && <Excluded unconnected={preview.unconnected.map(label)} unreadable={preview.unreadable.map(label)} />}
+    </section>
+  );
+}
+
+function TimeRow({ start, end, right }: { start: number; end: number; right?: React.ReactNode }) {
+  const [day, time] = [fullDateTime(iso(start)).split("）")[0] + "）", `${timeOnly(iso(start))}–${timeOnly(iso(end))}`];
+  return (
+    <li className="flex items-center gap-3 px-3.5 py-2.5">
+      <span className="text-ink-soft w-20 shrink-0 text-[13px]">{day}</span>
+      <span className="text-ink flex-1 text-[15px] font-semibold tabular-nums">{time}</span>
+      {right}
+    </li>
+  );
+}
+
+/** 参加者を色の点つきの小さなラベルで並べる。上に状態ごとの人数 */
+function People({
+  participants,
+  label,
+  onGuests,
+}: {
+  participants: Detail["participants"];
+  label: (k: string) => string;
+  onGuests?: () => void;
+}) {
+  const states: ParticipantState[] = ["connected", "manual", "unconnected", "unreadable", "declined"];
+  return (
+    <section>
+      <SectionTitle
+        title="参加者"
+        meta={`${participants.length}人`}
+        right={onGuests && <button type="button" onClick={onGuests} className={btn.text}>＋ ゲスト</button>}
+      />
+      <div className="text-ink-soft mb-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+        {states.map((s) => {
+          const n = participants.filter((p) => p.state === s).length;
+          return n === 0 ? null : (
+            <span key={s} className="flex items-center gap-1">
+              <Dot className={DOT[s]} />
+              {STATE_LABEL[s]} {n}
             </span>
-            {i === 0 && <Badge tone="grass">今なら決まる</Badge>}
+          );
+        })}
+      </div>
+      <ul className="flex flex-wrap gap-1.5">
+        {participants.map((p) => (
+          <li
+            key={p.name}
+            title={STATE_LABEL[p.state]}
+            className={`border-line flex items-center gap-1.5 rounded-full border bg-white py-1 pr-3 pl-2.5 text-[13px] ${
+              p.state === "declined" ? "text-ink-soft line-through" : "text-ink"
+            }`}
+          >
+            <Dot className={DOT[p.state]} />
+            {label(p.name)}
           </li>
         ))}
       </ul>
-      {result.windows.length > PREVIEW_LIMIT && (
-          <button type="button" onClick={() => setShowAll(!showAll)} className="text-navy mt-2 text-xs font-semibold">
-            {showAll ? "閉じる" : `すべて表示（ほか ${result.windows.length - PREVIEW_LIMIT}件）`}
+    </section>
+  );
+}
+
+function Excluded({ unconnected, unreadable }: { unconnected: string[]; unreadable: string[] }) {
+  if (unconnected.length === 0 && unreadable.length === 0) return null;
+  return (
+    <Note className="mt-2">
+      {unconnected.length > 0 && <>予定未登録で計算に入っていない人：{unconnected.join("、")}。</>}
+      {unreadable.length > 0 && <>カレンダーを読み込めず計算に入っていない人：{unreadable.join("、")}。</>}
+    </Note>
+  );
+}
+
+/* ───────── 決定済み ───────── */
+
+function ConfirmedBlock({
+  meeting: m,
+  participants,
+  label,
+  rsvpOpen,
+  member,
+  saving,
+  onRsvp,
+  onPick,
+  decided,
+}: {
+  meeting: Meeting;
+  participants: Detail["participants"];
+  label: (k: string) => string;
+  rsvpOpen: boolean;
+  member: string | null;
+  saving: boolean;
+  onRsvp: (attending: boolean) => void;
+  onPick: (start: number) => void;
+  decided: { start: number; end: number };
+}) {
+  const [extra, setExtra] = useState<"alt" | "table" | null>(null);
+  const calendarItem = {
+    id: m.id,
+    title: m.title,
+    description: m.description,
+    location: m.location,
+    event_date: m.confirmed_start!,
+    duration_min: m.duration_min,
+  };
+  const attendees = m.attendees ?? [];
+  const declined = participants.filter((p) => p.state === "declined").map((p) => p.name);
+  const absent = participants.map((p) => p.name).filter((n) => !attendees.includes(n) && !declined.includes(n));
+  const reasonOf = (name: string) =>
+    m.excluded.includes(name) ? "予定未登録" : (m.unreadable ?? []).includes(name) ? "読み込めず" : "予定あり";
+  const attending = member ? attendees.includes(member) : false;
+
+  return (
+    <>
+      <section className="border-grass/40 bg-grass-soft/50 mt-4 rounded-xl border px-4 py-3.5">
+        <div className="flex flex-col gap-2.5 md:flex-row md:items-center">
+          <div className="flex-1">
+            <p className="text-grass text-xs font-bold">この日時に決まりました</p>
+            <p className="text-ink text-xl font-bold whitespace-nowrap tabular-nums">
+              {fullDateTime(m.confirmed_start!)}–{timeOnly(iso(decided.end))}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Dropdown
+              label="カレンダーに追加"
+              items={[
+                { label: "Google カレンダー", href: googleCalendarUrl(calendarItem) },
+                { label: "iPhone・Mac（.ics）", onClick: () => downloadIcs(calendarItem) },
+                { label: "Outlook（個人）", href: outlookLiveUrl(calendarItem) },
+                { label: "Outlook（Office365）", href: outlookOffice365Url(calendarItem) },
+              ]}
+            />
+            {rsvpOpen && member && (
+              attending ? (
+                <button type="button" disabled={saving} onClick={() => onRsvp(false)} className={btn.secondary}>参加をやめる</button>
+              ) : (
+                <button type="button" disabled={saving} onClick={() => onRsvp(true)} className={btn.primary}>参加する</button>
+              )
+            )}
+          </div>
+        </div>
+        {m.attendees ? (
+          <dl className="mt-3 grid gap-1.5 text-sm">
+            <AttendanceRow tone="text-grass" label={`参加できる ${attendees.length}`} names={attendees.map(label)} />
+            <AttendanceRow tone="text-kyoto" label={`できない ${absent.length}`} names={absent.map((n) => `${label(n)}（${reasonOf(n)}）`)} />
+            <AttendanceRow tone="text-ink-soft" label={`不参加 ${declined.length}`} names={declined.map(label)} />
+          </dl>
+        ) : (
+          <Note className="mt-2">参加者 {participants.length}人中 {m.confirmed_available}人が参加できます</Note>
+        )}
+        {rsvpOpen && !member && (
+          <Note className="mt-2">
+            <Link href="/mypage" className="text-navy underline">マイページ</Link> で名前を選ぶと、参加登録できます。
+          </Note>
+        )}
+      </section>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {rsvpOpen && (
+          <button type="button" onClick={() => setExtra(extra === "alt" ? null : "alt")} className={extra === "alt" ? btn.primary : btn.secondary}>
+            ほかに全員がそろう時間
           </button>
+        )}
+        <button type="button" onClick={() => setExtra(extra === "table" ? null : "table")} className={extra === "table" ? btn.primary : btn.secondary}>
+          みんなの予定（表）
+        </button>
+      </div>
+      {extra === "alt" && <Alternatives meeting={m} onPick={onPick} />}
+      {extra === "table" && (
+        <div className="mt-3">
+          <MembersBusyGrid meetingId={m.id} ranges={meetingRanges(m)} decided={decided} />
+        </div>
       )}
-      <p className="text-ink-soft mt-2 text-[11px]">
-        各時間帯の中なら、{durationLabel(durationMin)}をどこに入れても大丈夫です
-      </p>
     </>
   );
 }
 
-function Excluded({
-  names,
-  settled,
-  unreadable,
-}: {
-  names: string[];
-  settled?: boolean;
-  unreadable?: boolean;
-}) {
-  if (names.length === 0) return null;
+function AttendanceRow({ tone, label, names }: { tone: string; label: string; names: string[] }) {
   return (
-    <p className="text-ink-soft mt-3 text-[11px]">
-      {names.join("、")} さんは
-      {unreadable
-        ? "カレンダーをつないでいますが読み込めなかった（権限が足りない・連携が切れた等）ため、"
-        : "予定が登録されていない（カレンダーも手動の予定も無い）ため、"}
-      {settled ? "計算に入っていません。" : "今は計算に入っていません。"}
-    </p>
-  );
-}
-
-/**
- * 決定した日時の出欠。3 列に分ける：
- * 参加できる（空いている）／参加できない（出たいが出られない。理由つき）／不参加（自分で不参加と回答）
- */
-function AttendanceLists({
-  label,
-  meeting: m,
-  participants,
-}: {
-  meeting: Meeting;
-  participants: Detail["participants"];
-  label: (key: string) => string;
-}) {
-  const attendees = m.attendees ?? [];
-  const reasonOf = (name: string) =>
-    m.excluded.includes(name)
-      ? "予定未登録"
-      : (m.unreadable ?? []).includes(name)
-        ? "カレンダーを読み込めず"
-        : "予定あり";
-  const declined = participants.filter((p) => p.state === "declined").map((p) => p.name);
-  const absent = participants
-    .map((p) => p.name)
-    .filter((name) => !attendees.includes(name) && !declined.includes(name));
-
-  return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-      <div className="border-line rounded-2xl border bg-white p-4">
-        <h2 className="text-grass text-sm font-bold">参加できる（{attendees.length}人）</h2>
-        <ul className="mt-2 space-y-1.5">
-          {attendees.map((name) => (
-            <li key={name} className="text-ink text-sm">{label(name)}</li>
-          ))}
-        </ul>
-      </div>
-      <div className="border-line rounded-2xl border bg-white p-4">
-        <h2 className="text-ink-soft text-sm font-bold">参加できない（{absent.length}人）</h2>
-        {absent.length === 0 ? (
-          <p className="text-ink-soft mt-2 text-xs">いません</p>
-        ) : (
-          <ul className="mt-2 space-y-1.5">
-            {absent.map((name) => (
-              <li key={name} className="flex items-center justify-between gap-2">
-                <span className="text-ink truncate text-sm">{label(name)}</span>
-                <span className="text-ink-soft shrink-0 text-[11px]">{reasonOf(name)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-      <div className="border-line rounded-2xl border bg-white p-4">
-        <h2 className="text-ink-soft text-sm font-bold">不参加（{declined.length}人）</h2>
-        {declined.length === 0 ? (
-          <p className="text-ink-soft mt-2 text-xs">いません</p>
-        ) : (
-          <ul className="mt-2 space-y-1.5">
-            {declined.map((name) => (
-              <li key={name} className="text-ink text-sm">{label(name)}</li>
-            ))}
-          </ul>
-        )}
-      </div>
+    <div className="flex gap-3">
+      <dt className={`w-24 shrink-0 font-bold ${tone}`}>{label}</dt>
+      <dd className="text-ink min-w-0 flex-1">{names.length > 0 ? names.join("、") : <span className="text-ink-soft">—</span>}</dd>
     </div>
   );
 }
 
-
-/** 決まった会議への参加登録。参加者に選ばれていなかった人も押せる。会議が終わるまで */
-function RsvpCard({
-  meeting: m,
-  member,
-  saving,
-  onChange,
-}: {
-  meeting: Meeting;
-  member: string | null;
-  saving: boolean;
-  onChange: (attending: boolean) => void;
-}) {
-  if (!member) {
-    return (
-      <p className="text-ink-soft text-xs">
-        <Link href="/mypage" className="text-navy underline">マイページ</Link>
-        で名前を選ぶと、この会議に参加登録できます。
-      </p>
-    );
-  }
-  const attending = (m.attendees ?? []).includes(member);
-  return (
-    <section className="border-line flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-white p-4">
-      <p className="text-ink text-sm font-bold">
-        {attending ? "あなたは参加予定です" : "この会議に参加しますか？"}
-      </p>
-      {attending ? (
-        <button
-          type="button"
-          disabled={saving}
-          onClick={() => onChange(false)}
-          className="border-line text-ink-soft rounded-xl border px-5 py-2.5 text-sm font-semibold disabled:opacity-40"
-        >
-          参加をやめる
-        </button>
-      ) : (
-        <button
-          type="button"
-          disabled={saving}
-          onClick={() => onChange(true)}
-          className="bg-grass rounded-xl px-5 py-2.5 text-sm font-bold text-white disabled:opacity-40"
-        >
-          参加する
-        </button>
-      )}
-    </section>
-  );
-}
-
 /**
- * 決まった時間のほかに、全員が参加できる時間の一覧（日程を動かしたいとき用）。
- * カレンダーを読むので、ページ本体とは別にあとから読み込む。
+ * 決まった時間のほかに、全員が参加できる時間（日程を動かしたいとき用）。
+ * カレンダーを読むので、開いたときにあとから読み込む。
  */
 function Alternatives({ meeting: m, onPick }: { meeting: Meeting; onPick: (start: number) => void }) {
   const [data, setData] = useState<{
@@ -582,40 +618,38 @@ function Alternatives({ meeting: m, onPick }: { meeting: Meeting; onPick: (start
   }, [m.id]);
 
   return (
-    <section className="border-line rounded-2xl border bg-white p-4">
-      <h2 className="text-ink text-sm font-bold">ほかに全員が参加できる時間</h2>
-      <p className="text-ink-soft mt-1 text-xs">
-        決まった時間以外で、候補の中から今のカレンダーで計算しています（決定後に入った予定も反映）。
-      </p>
-      {error && <p className="text-amber mt-2 text-xs">{error}</p>}
-      {!data && !error && <p className="text-ink-soft mt-3 text-xs">みんなのカレンダーを確認中…</p>}
+    <section className="mt-3">
+      {error && <ErrorText>{error}</ErrorText>}
+      {!data && !error && <Note className="py-4 text-center">みんなのカレンダーを確認中…</Note>}
       {data && data.windows.length === 0 && (
-        <p className="text-ink-soft mt-3 text-xs">ほかに全員（{data.total}人）がそろう時間はありません</p>
+        <Note className="py-3">ほかに全員（{data.total}人）がそろう時間はありません</Note>
       )}
       {data && data.windows.length > 0 && (
         <>
-          <ul className="mt-3 space-y-1.5">
+          <ul className="border-line divide-line divide-y overflow-hidden rounded-lg border bg-white">
             {data.windows.map((w) => (
-              <li key={w.start} className="flex items-center justify-between gap-2">
-                <span className="text-ink text-sm font-semibold">
-                  {fullDateTime(iso(w.start))}〜{timeOnly(iso(w.end))}
-                </span>
-                <button type="button" onClick={() => onPick(w.start)} className="text-navy shrink-0 text-[11px] underline">
-                  この時間に変える
-                </button>
-              </li>
+              <TimeRow
+                key={w.start}
+                start={w.start}
+                end={w.end}
+                right={<button type="button" onClick={() => onPick(w.start)} className={btn.text}>この時間に変える</button>}
+              />
             ))}
           </ul>
-          <p className="text-ink-soft mt-2 text-[11px]">
-            全員 {data.total}人。各時間帯の中なら、{durationLabel(m.duration_min)}をどこに入れても大丈夫です
-          </p>
+          <Note className="mt-1">全員 {data.total}人。今のカレンダーで計算しています（決定後に入った予定も反映）。</Note>
         </>
       )}
-      {data && <Excluded names={data.unconnected.map((k) => labelOf(data.labels, k))} />}
-      {data && <Excluded names={data.unreadable.map((k) => labelOf(data.labels, k))} unreadable />}
+      {data && (
+        <Excluded
+          unconnected={data.unconnected.map((k) => labelOf(data.labels, k))}
+          unreadable={data.unreadable.map((k) => labelOf(data.labels, k))}
+        />
+      )}
     </section>
   );
 }
+
+/* ───────── 「⋯」から開くパネルの中身 ───────── */
 
 type GuestRow = { id: string; name: string; state: ParticipantState };
 
@@ -623,7 +657,7 @@ type GuestRow = { id: string; name: string; state: ParticipantState };
  * 外部ゲスト。名前を入れて招待リンクを作り、相手に送る。
  * リンクは作った直後にだけ出る（DB にはハッシュしか残らない）。なくしたら作り直す。
  */
-function GuestsSection({ meetingId, onChange }: { meetingId: string; onChange: () => Promise<void> }) {
+function GuestsPanel({ meetingId, onChange }: { meetingId: string; onChange: () => Promise<void> }) {
   const [guests, setGuests] = useState<GuestRow[] | null>(null);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -706,76 +740,53 @@ function GuestsSection({ meetingId, onChange }: { meetingId: string; onChange: (
     });
   }
 
-  const stateLabel: Record<string, string> = {
-    connected: "カレンダー連携",
-    manual: "手動入力",
-    unconnected: "未回答",
-    declined: "不参加",
-  };
-
   return (
-    <section className="mt-8">
-      <h2 className="text-ink mb-1 text-sm font-bold md:text-base">外部ゲスト</h2>
-      <p className="text-ink-soft mb-3 text-xs">
+    <div className="space-y-3">
+      <Note>
         メンバー以外の人を招けます。名前を入れて招待リンクを作り、相手に送ってください。
         ゲストのページには、会議の内容・候補・決まった日時と人数だけが出ます（メンバーの名前は出ません）。
-      </p>
-
-      {error && <p className="text-amber bg-amber-soft mb-3 rounded-xl p-3 text-xs">{error}</p>}
-
+      </Note>
+      {error && <ErrorText>{error}</ErrorText>}
       {issued && (
-        <div className="bg-grass-soft mb-3 rounded-xl p-3">
-          <p className="text-ink text-xs font-bold">{issued.name} さんの招待リンク（この画面を閉じると二度と表示されません）</p>
+        <div className="bg-grass-soft rounded-lg p-3">
+          <p className="text-ink text-[13px] font-bold">{issued.name} さんの招待リンク（閉じると二度と表示されません）</p>
           <div className="mt-2 flex gap-2">
-            <input readOnly value={issued.url} onFocus={(e) => e.target.select()} className="border-line min-w-0 flex-1 rounded-lg border bg-white px-2 py-1.5 text-xs" />
+            <input readOnly value={issued.url} onFocus={(e) => e.target.select()} className={`${field} min-w-0 flex-1 text-[13px]`} />
             <button
               type="button"
               onClick={async () => {
                 await navigator.clipboard.writeText(issued.url);
                 setCopied(true);
               }}
-              className="bg-navy shrink-0 rounded-lg px-3 text-xs font-bold text-white"
+              className={`${btn.primary} shrink-0`}
             >
               {copied ? "コピー済み" : "コピー"}
             </button>
           </div>
         </div>
       )}
-
       <form onSubmit={add} className="flex gap-2">
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="ゲストの名前（例：教科書センター 山田さん）"
-          maxLength={50}
-          className="border-line focus:border-navy min-w-0 flex-1 rounded-xl border bg-white px-3 py-2.5 text-sm outline-none"
-        />
-        <button type="submit" disabled={!name.trim() || busy} className="bg-navy shrink-0 rounded-xl px-4 text-sm font-bold text-white disabled:opacity-40">
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="ゲストの名前（例：教科書センター 山田さん）" maxLength={50} className={`${field} min-w-0 flex-1`} />
+        <button type="submit" disabled={!name.trim() || busy} className={`${btn.primary} shrink-0`}>
           招待リンクを作る
         </button>
       </form>
-
       {guests && guests.length > 0 && (
-        <ul className="mt-3 space-y-2">
+        <ul className="border-line divide-line divide-y overflow-hidden rounded-lg border">
           {guests.map((g) => (
-            <li key={g.id} className="border-line flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2.5">
-              <span className="text-ink truncate text-sm">{g.name}</span>
-              <span className="flex items-center gap-2">
-                <Badge tone={g.state === "unconnected" ? "outline" : g.state === "declined" ? "muted" : "navy"}>
-                  {stateLabel[g.state] ?? g.state}
-                </Badge>
-                <button type="button" disabled={busy} onClick={() => reissue(g)} className="text-navy text-[11px] underline disabled:opacity-40">
-                  リンクを作り直す
-                </button>
-                <button type="button" disabled={busy} onClick={() => remove(g)} className="text-ink-soft text-[11px] underline disabled:opacity-40">
-                  外す
-                </button>
+            <li key={g.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
+              <span className="text-ink flex min-w-0 flex-1 items-center gap-2 text-sm">
+                <Dot className={DOT[g.state]} />
+                <span className="truncate">{g.name}</span>
+                <span className="text-ink-soft text-xs">{g.state === "unconnected" ? "未回答" : STATE_LABEL[g.state]}</span>
               </span>
+              <button type="button" disabled={busy} onClick={() => reissue(g)} className={btn.text}>リンクを作り直す</button>
+              <button type="button" disabled={busy} onClick={() => remove(g)} className="text-ink-soft text-[13px] hover:underline disabled:opacity-40">外す</button>
             </li>
           ))}
         </ul>
       )}
-    </section>
+    </div>
   );
 }
 
@@ -783,12 +794,11 @@ function GuestsSection({ meetingId, onChange }: { meetingId: string; onChange: (
  * 募集の延長。どの状態の会議でも、結果発表を今から何時間後かに置き直し、候補も入れ直せる。
  * 決まっていた・不成立だった会議は募集中に戻る（決まっていた日時と出欠は取り消し）。
  */
-function ExtendSection({ meeting: m, onDone }: { meeting: Meeting; onDone: () => Promise<void> }) {
+function ExtendForm({ meeting: m, onDone }: { meeting: Meeting; onDone: () => Promise<void> }) {
   const [hours, setHours] = useState(48);
   const [ranges, setRanges] = useState<RangeRow[]>(() => fromCandidateRanges(meetingRanges(m)));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const field = "border-line focus:border-navy text-ink w-full rounded-xl border bg-white px-3 py-2.5 text-sm outline-none";
 
   async function submit() {
     if (saving || !rangesReady(ranges)) return;
@@ -817,35 +827,29 @@ function ExtendSection({ meeting: m, onDone }: { meeting: Meeting; onDone: () =>
   }
 
   return (
-    <details className="border-line mt-8 rounded-2xl border bg-white p-4">
-      <summary className="text-ink cursor-pointer text-sm font-bold">
-        {m.status === "open" ? "募集を延長する" : "募集を延長してやり直す"}
-      </summary>
-      <p className="text-ink-soft mt-2 text-xs">
+    <div className="space-y-3">
+      <Note>
         {m.status === "open"
           ? "結果発表を遅らせます。候補も入れ直せます。"
           : "募集中に戻して、新しい結果発表の時刻にもう一度自動で決めます。決まっていた日時と出欠は取り消しになります（各自の予定はそのまま使います）。"}
-      </p>
-      <label className="text-ink mt-3 mb-1 block text-xs font-semibold" htmlFor={`extend-${m.id}`}>
-        結果発表（今から）
+      </Note>
+      <label className="block">
+        <span className="text-ink mb-1 block text-[13px] font-semibold">結果発表（今から）</span>
+        <select value={hours} onChange={(e) => setHours(Number(e.target.value))} className={field}>
+          {MEETING_DEADLINE_HOURS.map((h) => (
+            <option key={h} value={h}>{hoursLabel(h)}</option>
+          ))}
+        </select>
       </label>
-      <select id={`extend-${m.id}`} value={hours} onChange={(e) => setHours(Number(e.target.value))} className={field}>
-        {MEETING_DEADLINE_HOURS.map((h) => (
-          <option key={h} value={h}>{hoursLabel(h)}</option>
-        ))}
-      </select>
-      <p className="text-ink mt-3 mb-1 text-xs font-semibold">候補（{ranges.length}件）</p>
-      <RangesInput ranges={ranges} onChange={setRanges} field={field} />
-      {error && <p className="text-amber bg-amber-soft mt-3 rounded-xl p-3 text-xs">{error}</p>}
-      <button
-        type="button"
-        disabled={saving || !rangesReady(ranges)}
-        onClick={submit}
-        className="bg-navy mt-4 w-full rounded-xl py-3 text-sm font-bold text-white disabled:opacity-40"
-      >
-        {saving ? "更新中…" : "延長する"}
+      <div>
+        <span className="text-ink mb-1 block text-[13px] font-semibold">候補（{ranges.length}件）</span>
+        <RangesInput ranges={ranges} onChange={setRanges} field={field} />
+      </div>
+      {error && <ErrorText>{error}</ErrorText>}
+      <button type="button" disabled={saving || !rangesReady(ranges)} onClick={submit} className={`${btn.primary} w-full`}>
+        {saving ? "更新中…" : m.status === "open" ? "延長する" : "募集をやり直す"}
       </button>
-    </details>
+    </div>
   );
 }
 
@@ -861,7 +865,7 @@ function jstParts(ms: number) {
  * 決まった日時を手で変える。日付と開始時刻は自由（30 分刻み）。
  * 変えると、新しい時間で出欠を計算し直し、あとからの参加登録は消える。Discord にも流れる。
  */
-function RescheduleSection({
+function RescheduleForm({
   meeting: m,
   picked,
   onDone,
@@ -875,8 +879,7 @@ function RescheduleSection({
   const [min, setMin] = useState(initial.min);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const field = "border-line focus:border-navy text-ink rounded-xl border bg-white px-3 py-2.5 text-sm outline-none";
-  const label = (x: number) => `${Math.floor(x / 60)}:${String(x % 60).padStart(2, "0")}`;
+  const hm = (x: number) => `${Math.floor(x / 60)}:${String(x % 60).padStart(2, "0")}`;
 
   async function submit() {
     const start = Date.parse(`${date}T00:00:00+09:00`) + min * 60 * 1000;
@@ -900,30 +903,21 @@ function RescheduleSection({
   }
 
   return (
-    <details open={picked !== null} className="border-line rounded-2xl border bg-white p-4">
-      <summary className="text-ink cursor-pointer text-sm font-bold">日時を変更する</summary>
-      <p className="text-ink-soft mt-2 text-xs">
-        候補の外の日時にもできます。変えると、新しい時間でみんなの予定から出欠を計算し直します
-        （あとから押した「参加する／やめる」は消えます）。
-      </p>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <input aria-label="日付" type="date" value={date} onChange={(e) => setDate(e.target.value)} className={field} />
-        <select aria-label="開始時刻" value={min} onChange={(e) => setMin(Number(e.target.value))} className={field}>
+    <div className="space-y-3">
+      <Note>候補の外の日時にもできます。新しい時間でみんなの予定から出欠を計算し直します（あとから押した「参加する／やめる」は消えます）。</Note>
+      <div className="flex flex-wrap items-center gap-2">
+        <input aria-label="日付" type="date" value={date} onChange={(e) => setDate(e.target.value)} className={`${field} w-auto`} />
+        <select aria-label="開始時刻" value={min} onChange={(e) => setMin(Number(e.target.value))} className={`${field} w-auto`}>
           {HALF_HOURS.map((x) => (
-            <option key={x} value={x}>{label(x)}</option>
+            <option key={x} value={x}>{hm(x)}</option>
           ))}
         </select>
-        <span className="text-ink-soft text-xs">から {durationLabel(m.duration_min)}</span>
+        <span className="text-ink-soft text-[13px]">から {durationLabel(m.duration_min)}</span>
       </div>
-      {error && <p className="text-amber bg-amber-soft mt-3 rounded-xl p-3 text-xs">{error}</p>}
-      <button
-        type="button"
-        disabled={saving || !date}
-        onClick={submit}
-        className="bg-navy mt-4 w-full rounded-xl py-3 text-sm font-bold text-white disabled:opacity-40"
-      >
+      {error && <ErrorText>{error}</ErrorText>}
+      <button type="button" disabled={saving || !date} onClick={submit} className={`${btn.primary} w-full`}>
         {saving ? "変更中…" : "この日時に変更する"}
       </button>
-    </details>
+    </div>
   );
 }

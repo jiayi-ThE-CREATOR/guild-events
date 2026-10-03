@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import DayPager, { pageColumns, pageCount } from "@/components/DayPager";
+import { btn } from "@/components/ui";
 import { CELL_MIN, type CellState, type Cells } from "@/lib/manual";
 
 /**
@@ -142,7 +143,7 @@ export default function ScheduleEditor({
             type="button"
             onClick={() => setBrush(b.key)}
             aria-pressed={brush === b.key}
-            className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold ${
+            className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-semibold ${
               brush === b.key ? "border-navy bg-navy-soft text-navy" : "border-line text-ink-soft bg-white"
             }`}
           >
@@ -153,8 +154,8 @@ export default function ScheduleEditor({
       </div>
 
       <DayPager page={page} pages={pageCount(columns.length)} label={pageLabel} onChange={setPage} />
-      <div className="border-line overflow-x-auto rounded-2xl border bg-white">
-        <table className="w-full border-collapse select-none text-[10px]">
+      <div className="border-line overflow-x-auto rounded-lg border bg-white">
+        <table className="w-full border-collapse select-none text-[11px]">
           <thead>
             <tr>
               <th className="bg-white w-10" />
@@ -209,7 +210,7 @@ export default function ScheduleEditor({
         </table>
       </div>
 
-      <div className="text-ink-soft mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+      <div className="text-ink-soft mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
         <Legend className="bg-kyoto/80" label="予定あり" />
         <Legend className="bg-grass/80" label="空いている" />
         {base && <Legend className="bg-ink-soft/25" label={baseNote ?? "ほかの予定"} />}
@@ -221,7 +222,7 @@ export default function ScheduleEditor({
         }
       }} />
 
-      <label className="text-ink mt-4 flex items-start gap-2 text-xs">
+      <label className="text-ink mt-3 flex items-start gap-2 text-[13px]">
         <input
           type="checkbox"
           checked={exclusive}
@@ -234,7 +235,7 @@ export default function ScheduleEditor({
         />
         <span>
           「空いている」で塗った時間以外は、すべて予定ありとみなす
-          <span className="text-ink-soft block text-[11px]">
+          <span className="text-ink-soft block text-xs">
             カレンダーを使わず、出られる時間だけを塗りたい人向け
           </span>
         </span>
@@ -245,13 +246,13 @@ export default function ScheduleEditor({
           type="button"
           onClick={handleSave}
           disabled={!dirty || saving}
-          className="bg-navy rounded-xl px-6 py-2.5 text-sm font-bold text-white disabled:opacity-40"
+          className={`${btn.primary} px-6`}
         >
           {saving ? "保存中…" : "保存"}
         </button>
-        {dirty && !saving && <span className="text-amber text-xs">未保存の変更があります</span>}
+        {dirty && !saving && <span className="text-amber text-[13px]">未保存の変更があります</span>}
         {message && (
-          <span className={`text-xs ${message.ok ? "text-grass" : "text-amber"}`}>{message.text}</span>
+          <span className={`text-[13px] ${message.ok ? "text-grass" : "text-amber"}`}>{message.text}</span>
         )}
       </div>
     </div>
@@ -285,11 +286,11 @@ function RangeForm({
   const [state, setState] = useState<CellState>("busy");
   const times: number[] = [];
   for (let m = startMin; m <= endMin; m += CELL_MIN) times.push(m);
-  const field = "border-line rounded-lg border bg-white px-2 py-1.5 text-xs";
+  const field = "border-line rounded-lg border bg-white px-2 py-1.5 text-[13px]";
 
   return (
     <details className="mt-3">
-      <summary className="text-navy cursor-pointer text-xs font-semibold">＋ 時間を指定して追加</summary>
+      <summary className="text-navy cursor-pointer text-[13px] font-semibold">＋ 時間を指定して追加</summary>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <select aria-label="日" value={col} onChange={(e) => setCol(Number(e.target.value))} className={field}>
           {columns.map((c, i) => (
@@ -313,7 +314,7 @@ function RangeForm({
           type="button"
           disabled={from >= to}
           onClick={() => onAdd(col, from, to, state)}
-          className="border-navy text-navy rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-40"
+          className={btn.secondary}
         >
           追加
         </button>

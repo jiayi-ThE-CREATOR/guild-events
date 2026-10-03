@@ -10,6 +10,7 @@ import { inRanges, rangeDates, type CandidateRange } from "@/lib/ranges";
  * 「この会議の予定」。候補の範囲の中だけを塗る。ここで塗ったマスは
  * 毎週の予定・外部カレンダーより優先される。下の層での見え方を薄く重ねて出す。
  * メンバーの会議ページと、外部ゲストの招待ページで共用（読み書きする URL だけ違う）。
+ * 枠や見出しは置く側が持つ（会議ページは「⋯」から開くパネル、ゲストページは手順の②）。
  */
 export default function MeetingEntry({
   ranges,
@@ -17,7 +18,6 @@ export default function MeetingEntry({
   saveUrl,
   saveBody,
   onSaved,
-  defaultOpen = false,
 }: {
   ranges: CandidateRange[];
   loadUrl: string;
@@ -25,7 +25,6 @@ export default function MeetingEntry({
   /** 保存時に cells・exclusive と一緒に送るもの（メンバーなら { member }） */
   saveBody: Record<string, unknown>;
   onSaved: () => Promise<void>;
-  defaultOpen?: boolean;
 }) {
   const [loaded, setLoaded] = useState<{
     cells: Cells;
@@ -69,19 +68,17 @@ export default function MeetingEntry({
   }
 
   return (
-    <details open={defaultOpen} className="border-line mt-4 rounded-2xl border bg-white p-4">
-      <summary className="text-ink cursor-pointer text-sm font-bold">この会議の予定を手動で入れる</summary>
-      <p className="text-ink-soft mt-2 mb-3 text-xs">
-        この会議の候補の中で、カレンダーと違うところや、カレンダーに無い予定を塗ってください。
-        ここで塗ったところが一番優先されます。
+    <div>
+      <p className="text-ink-soft mb-2.5 text-xs leading-relaxed">
+        候補の中で、カレンダーと違うところや、カレンダーに無い予定を塗ってください。ここで塗ったところが一番優先されます。
       </p>
-      {error && <p className="text-amber bg-amber-soft rounded-xl p-3 text-xs">{error}</p>}
+      {error && <p className="text-amber bg-amber-soft rounded-lg px-3 py-2 text-[13px]">{error}</p>}
       {loaded?.calendarError && (
-        <p className="text-amber bg-amber-soft mb-3 rounded-xl p-3 text-xs">
+        <p className="text-amber bg-amber-soft mb-2.5 rounded-lg px-3 py-2 text-[13px]">
           外部カレンダーを読み込めなかったので、薄い色の表示にカレンダーの予定は入っていません。
         </p>
       )}
-      {!loaded && !error && <p className="text-ink-soft py-4 text-center text-xs">読み込み中…</p>}
+      {!loaded && !error && <p className="text-ink-soft py-4 text-center text-[13px]">読み込み中…</p>}
       {loaded && (
         <ScheduleEditor
           columns={columns}
@@ -96,6 +93,6 @@ export default function MeetingEntry({
           onSave={save}
         />
       )}
-    </details>
+    </div>
   );
 }
