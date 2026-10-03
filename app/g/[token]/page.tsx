@@ -209,7 +209,11 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
+/** 「今の時点の候補」は、これより多いと残りを折りたたむ */
+const PREVIEW_LIMIT = 5;
+
 function Preview({ result, durationMin, deadline }: { result: SlotResult; durationMin: number; deadline: string }) {
+  const [showAll, setShowAll] = useState(false);
   return (
     <section className="mt-8">
       <h2 className="text-ink text-sm font-bold">今の時点の候補</h2>
@@ -228,12 +232,17 @@ function Preview({ result, durationMin, deadline }: { result: SlotResult; durati
               : `${result.total}人中 ${result.available}人が参加できる時間`}
           </p>
           <ul className="space-y-2">
-            {result.windows.map((w) => (
+            {(showAll ? result.windows : result.windows.slice(0, PREVIEW_LIMIT)).map((w) => (
               <li key={w.start} className="border-line text-ink rounded-2xl border bg-white p-3.5 text-sm font-semibold">
                 {fullDateTime(iso(w.start))}〜{timeOnly(iso(w.end))}
               </li>
             ))}
           </ul>
+          {result.windows.length > PREVIEW_LIMIT && (
+            <button type="button" onClick={() => setShowAll(!showAll)} className="text-navy mt-2 text-xs font-semibold">
+              {showAll ? "閉じる" : `すべて表示（ほか ${result.windows.length - PREVIEW_LIMIT}件）`}
+            </button>
+          )}
           <p className="text-ink-soft mt-2 text-[11px]">各時間帯の中なら、{durationLabel(durationMin)}をどこに入れても大丈夫です</p>
         </>
       )}
