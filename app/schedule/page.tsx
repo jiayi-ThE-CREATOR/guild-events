@@ -92,9 +92,19 @@ export default function MeetingListPage() {
                     ) : (
                       "そろう時間なし"
                     )}
-                    {` · ${durationLabel(m.duration_min)} · 主催 ${m.organizer} · ${m.participants.length}人`}
+                    {` · ${durationLabel(m.duration_min)} · 主催 ${m.organizer}`}
+                    {!m.entered && ` · ${m.participants.length}人`}
                   </p>
                 </div>
+                {m.entered && (
+                  <span className="shrink-0 text-right leading-tight">
+                    <span className="text-ink-soft block text-[11px]">予定入力</span>
+                    <span className="text-ink text-sm font-bold">
+                      {m.entered.done}/{m.entered.of}
+                      <span className="text-ink-soft text-xs font-normal">人</span>
+                    </span>
+                  </span>
+                )}
                 <span aria-hidden className="text-ink-soft shrink-0 text-lg">›</span>
               </Link>
             </li>

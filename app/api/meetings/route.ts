@@ -7,7 +7,7 @@ import { getAdmin, NOT_CONFIGURED } from "@/lib/server/admin";
 import { registeredMembers } from "@/lib/server/availability";
 import { notifyOpened } from "@/lib/server/discord";
 import { createGuest, guestNameProblem, MAX_GUESTS } from "@/lib/server/guests";
-import { settleDue, type Meeting } from "@/lib/server/meetings";
+import { enteredCounts, settleDue, type Meeting } from "@/lib/server/meetings";
 
 const LIST_FIELDS =
   "id, title, organizer, participants, duration_min, deadline, status, confirmed_start, created_at";
@@ -26,7 +26,13 @@ export async function GET(req: NextRequest) {
     .select(LIST_FIELDS)
     .order("created_at", { ascending: false });
   if (error) return Response.json({ error: error.message }, { status: 500 });
-  return Response.json({ meetings: data });
+  try {
+    const counts = await enteredCounts(admin, data.filter((m) => m.status === "open"));
+    return Response.json({ meetings: data.map((m) => ({ ...m, entered: counts.get(m.id) })) });
+  } catch (e) {
+    console.error(`[meetings] ${(e as Error).message}`);
+    return Response.json({ meetings: data });
+  }
 }
 
 type Body = {

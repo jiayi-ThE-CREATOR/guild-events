@@ -15,6 +15,8 @@ export type MeetingSummary = {
   status: MeetingStatus;
   confirmed_start: string | null;
   created_at: string;
+  /** 募集中のみ。予定（カレンダーか手入力）を入れた人数と、不参加を除いた参加者数 */
+  entered?: { done: number; of: number };
 };
 
 export type ParticipantState = "connected" | "manual" | "unconnected" | "unreadable" | "declined";

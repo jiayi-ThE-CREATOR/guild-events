@@ -430,11 +430,13 @@ function People({
   onGuests?: () => void;
 }) {
   const states: ParticipantState[] = ["connected", "manual", "unconnected", "unreadable", "declined"];
+  const active = participants.filter((p) => p.state !== "declined");
+  const entered = active.filter((p) => p.state === "connected" || p.state === "manual").length;
   return (
     <section>
       <SectionTitle
         title="参加者"
-        meta={`${participants.length}人`}
+        meta={`${participants.length}人 · 予定入力 ${entered}/${active.length}`}
         right={onGuests && <button type="button" onClick={onGuests} className={btn.text}>＋ ゲスト</button>}
       />
       <div className="text-ink-soft mb-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
