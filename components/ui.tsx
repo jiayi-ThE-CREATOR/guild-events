@@ -113,9 +113,14 @@ export function Menu({ items }: { items: { label: string; onClick: () => void; d
 export function Dropdown({
   label,
   items,
+  buttonClass = btn.secondary,
+  alignRight = false,
 }: {
   label: string;
   items: { label: string; href?: string; onClick?: () => void }[];
+  buttonClass?: string;
+  /** 行の右端に置くときは右揃えで開く（画面からはみ出さないように） */
+  alignRight?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -129,11 +134,11 @@ export function Dropdown({
   }, [open]);
   return (
     <div ref={ref} className="relative">
-      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className={btn.secondary}>
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className={buttonClass}>
         {label} ▾
       </button>
       {open && (
-        <div className="border-line absolute left-0 z-20 mt-1 w-52 overflow-hidden rounded-xl border bg-white py-1 shadow-lg">
+        <div className={`border-line absolute ${alignRight ? "right-0" : "left-0"} z-20 mt-1 w-60 overflow-hidden rounded-xl border bg-white py-1 shadow-lg`}>
           {items.map((it) =>
             it.href ? (
               <a key={it.label} href={it.href} target="_blank" rel="noopener noreferrer" onClick={() => setOpen(false)} className="text-ink hover:bg-canvas block px-3.5 py-2.5 text-sm">

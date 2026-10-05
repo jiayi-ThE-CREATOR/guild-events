@@ -6,11 +6,22 @@ import type { EventRecord } from "./types";
  */
 export const DEFAULT_DURATION_HOURS = 2;
 
-/** カレンダーに登録できるもの。会議のように長さが決まっていれば duration_min を渡す */
+/**
+ * カレンダーに登録できるもの。会議のように長さが決まっていれば duration_min を渡す。
+ * tentative は日時がまだ決まっていない会議の候補。件名に【仮】を付け、「予定なし（空き）」で
+ * 入れる。予定ありで入れると、カレンダー連携している本人がその時間に埋まって見え、
+ * その候補が自分の予定で消えてしまうため
+ */
 export type CalendarItem = Pick<
   EventRecord,
   "id" | "title" | "description" | "location" | "event_date"
-> & { duration_min?: number };
+> & { duration_min?: number; tentative?: boolean };
+
+const TENTATIVE_NOTE = "まだ決まっていない候補の時間です。結果発表のあと、決まった日時を確かめてください。";
+
+function title(event: CalendarItem) {
+  return event.tentative ? `【仮】${event.title}` : event.title;
+}
 
 function startEnd(event: CalendarItem) {
   const start = new Date(event.event_date);
@@ -28,18 +39,21 @@ function utcCompact(d: Date) {
 }
 
 function details(event: CalendarItem) {
-  return event.description ?? "";
+  const text = event.description ?? "";
+  return event.tentative ? [TENTATIVE_NOTE, text].filter(Boolean).join("\n\n") : text;
 }
 
 export function googleCalendarUrl(event: CalendarItem): string {
   const { start, end } = startEnd(event);
   const params = new URLSearchParams({
     action: "TEMPLATE",
-    text: event.title,
+    text: title(event),
     dates: `${utcCompact(start)}/${utcCompact(end)}`,
     details: details(event),
     location: event.location ?? "",
   });
+  // trp=false で「予定なし（空き）」として入る
+  if (event.tentative) params.set("trp", "false");
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
@@ -48,7 +62,7 @@ function outlookUrl(host: string, event: CalendarItem): string {
   const params = new URLSearchParams({
     path: "/calendar/action/compose",
     rru: "addevent",
-    subject: event.title,
+    subject: title(event),
     startdt: start.toISOString(),
     enddt: end.toISOString(),
     location: event.location ?? "",
@@ -87,9 +101,10 @@ export function icsContent(event: CalendarItem): string {
     `DTSTAMP:${utcCompact(new Date())}`,
     `DTSTART:${utcCompact(start)}`,
     `DTEND:${utcCompact(end)}`,
-    `SUMMARY:${escapeIcs(event.title)}`,
+    `SUMMARY:${escapeIcs(title(event))}`,
     `DESCRIPTION:${escapeIcs(details(event))}`,
     `LOCATION:${escapeIcs(event.location ?? "")}`,
+    ...(event.tentative ? ["STATUS:TENTATIVE", "TRANSP:TRANSPARENT"] : []),
     "END:VEVENT",
     "END:VCALENDAR",
   ].join("\r\n");
@@ -103,9 +118,28 @@ export function downloadIcs(event: CalendarItem) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${event.title.replace(/[/\\?%*:|"<>]/g, "-")}.ics`;
+  a.download = `${title(event).replace(/[/\\?%*:|"<>]/g, "-")}.ics`;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+/**
+ * 「カレンダーに追加 ▾」の中身。仮の候補では Outlook を出さない（リンクで「空き」を指定できない）。
+ * Outlook の人は .ics を開けば空きのまま入る
+ */
+export function calendarMenu(event: CalendarItem): { label: string; href?: string; onClick?: () => void }[] {
+  if (event.tentative) {
+    return [
+      { label: "Google カレンダー", href: googleCalendarUrl(event) },
+      { label: "iPhone・Mac・Outlook（.ics）", onClick: () => downloadIcs(event) },
+    ];
+  }
+  return [
+    { label: "Google カレンダー", href: googleCalendarUrl(event) },
+    { label: "iPhone・Mac（.ics）", onClick: () => downloadIcs(event) },
+    { label: "Outlook（個人）", href: outlookLiveUrl(event) },
+    { label: "Outlook（Office365）", href: outlookOffice365Url(event) },
+  ];
 }

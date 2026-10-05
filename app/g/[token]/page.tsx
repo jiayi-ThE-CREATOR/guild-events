@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import CalendarConnections from "@/components/CalendarConnections";
 import MeetingEntry from "@/components/MeetingEntry";
 import { btn, Dot, DOT, Dropdown, ErrorText, Note, SectionTitle, Tag } from "@/components/ui";
-import { downloadIcs, googleCalendarUrl, outlookLiveUrl, outlookOffice365Url } from "@/lib/calendar";
+import { calendarMenu, type CalendarItem } from "@/lib/calendar";
 import { fullDateTime, timeOnly } from "@/lib/format";
 import { durationLabel } from "@/lib/meetings";
 import { rangeLabel, type CandidateRange } from "@/lib/ranges";
@@ -148,12 +148,7 @@ function GuestView() {
             {view.result.youAttend && (
               <Dropdown
                 label="カレンダーに追加"
-                items={[
-                  { label: "Google カレンダー", href: googleCalendarUrl(calendarItem) },
-                  { label: "iPhone・Mac（.ics）", onClick: () => downloadIcs(calendarItem) },
-                  { label: "Outlook（個人）", href: outlookLiveUrl(calendarItem) },
-                  { label: "Outlook（Office365）", href: outlookOffice365Url(calendarItem) },
-                ]}
+                items={calendarMenu(calendarItem)}
               />
             )}
           </div>
@@ -224,7 +219,12 @@ function GuestView() {
             </>
           )}
 
-          {view.preview && <Preview result={view.preview} durationMin={m.duration_min} deadline={m.deadline} />}
+          {view.preview && <Preview
+              result={view.preview}
+              durationMin={m.duration_min}
+              deadline={m.deadline}
+              calendarBase={{ id: token, title: m.title, description: m.description, location: m.location, duration_min: m.duration_min }}
+            />}
         </>
       )}
     </div>
@@ -234,7 +234,17 @@ function GuestView() {
 /** 「今の時点の候補」は、これより多いと残りを折りたたむ */
 const PREVIEW_LIMIT = 5;
 
-function Preview({ result, durationMin, deadline }: { result: SlotResult; durationMin: number; deadline: string }) {
+function Preview({
+  result,
+  durationMin,
+  deadline,
+  calendarBase,
+}: {
+  result: SlotResult;
+  durationMin: number;
+  deadline: string;
+  calendarBase: Omit<CalendarItem, "event_date">;
+}) {
   const [showAll, setShowAll] = useState(false);
   const ok = result.available !== null && result.windows.length > 0;
   return (
@@ -255,13 +265,20 @@ function Preview({ result, durationMin, deadline }: { result: SlotResult; durati
         </p>
       ) : (
         <>
-          <ul className="border-line divide-line divide-y overflow-hidden rounded-lg border bg-white">
+          <ul className="border-line divide-line divide-y rounded-lg border bg-white">
             {(showAll ? result.windows : result.windows.slice(0, PREVIEW_LIMIT)).map((w) => (
               <li key={w.start} className="flex items-center gap-3 px-3.5 py-2.5">
                 <span className="text-ink-soft w-20 shrink-0 text-[13px]">{fullDateTime(iso(w.start)).split("）")[0]}）</span>
                 <span className="text-ink flex-1 text-[15px] font-semibold tabular-nums">
                   {timeOnly(iso(w.start))}–{timeOnly(iso(w.end))}
                 </span>
+                {/* 候補を【仮】・空きのまま自分のカレンダーに入れる。時間帯の頭から会議の長さぶん */}
+                <Dropdown
+                  label="仮で追加"
+                  alignRight
+                  buttonClass={`${btn.text} shrink-0 text-[13px]`}
+                  items={calendarMenu({ ...calendarBase, id: `${calendarBase.id}-${w.start}`, event_date: iso(w.start), tentative: true })}
+                />
               </li>
             ))}
           </ul>

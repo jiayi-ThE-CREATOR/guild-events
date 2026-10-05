@@ -8,7 +8,7 @@ import MembersBusyGrid from "@/components/MembersBusyGrid";
 import PageHeader from "@/components/PageHeader";
 import RangesInput, { fromCandidateRanges, rangesReady, toCandidateRanges, type RangeRow } from "@/components/RangesInput";
 import { btn, Dot, DOT, Dropdown, ErrorText, field, Menu, Note, Panel, SectionTitle, Segmented, Tag } from "@/components/ui";
-import { downloadIcs, googleCalendarUrl, outlookLiveUrl, outlookOffice365Url } from "@/lib/calendar";
+import { calendarMenu } from "@/lib/calendar";
 import { fullDateTime, timeOnly } from "@/lib/format";
 import { labelOf } from "@/lib/guests";
 import { durationLabel, hoursLabel, MEETING_DEADLINE_HOURS, type ParticipantState } from "@/lib/meetings";
@@ -382,9 +382,15 @@ function Candidates({
           {result.available !== result.total && (
             <p className="text-amber mb-1.5 text-[13px]">全員はそろいません。1人欠けの時間を出しています。</p>
           )}
-          <ul className="border-line divide-line divide-y overflow-hidden rounded-lg border bg-white">
+          <ul className="border-line divide-line divide-y rounded-lg border bg-white">
             {(showAll ? result.windows : result.windows.slice(0, PREVIEW_LIMIT)).map((w, i) => (
-              <TimeRow key={w.start} start={w.start} end={w.end} right={i === 0 && <Tag tone="grass">今なら決まる</Tag>} />
+              <TimeRow
+                key={w.start}
+                start={w.start}
+                end={w.end}
+                tag={i === 0 && <Tag tone="grass">今なら決まる</Tag>}
+                right={<TentativeAdd meeting={m} start={w.start} />}
+              />
             ))}
           </ul>
           {result.windows.length > PREVIEW_LIMIT && (
@@ -408,12 +414,46 @@ function Candidates({
   );
 }
 
-function TimeRow({ start, end, right }: { start: number; end: number; right?: React.ReactNode }) {
+/** 候補の時間を【仮】・空きのまま自分のカレンダーに入れる。時間帯の頭から会議の長さぶん */
+function TentativeAdd({ meeting: m, start }: { meeting: Meeting; start: number }) {
+  return (
+    <Dropdown
+      label="仮で追加"
+      alignRight
+      buttonClass={`${btn.text} shrink-0 text-[13px]`}
+      items={calendarMenu({
+        id: `${m.id}-${start}`,
+        title: m.title,
+        description: m.description,
+        location: m.location,
+        event_date: iso(start),
+        duration_min: m.duration_min,
+        tentative: true,
+      })}
+    />
+  );
+}
+
+function TimeRow({
+  start,
+  end,
+  tag,
+  right,
+}: {
+  start: number;
+  end: number;
+  /** 時間のすぐ後ろ。狭い画面では時間の下に回る */
+  tag?: React.ReactNode;
+  right?: React.ReactNode;
+}) {
   const [day, time] = [fullDateTime(iso(start)).split("）")[0] + "）", `${timeOnly(iso(start))}–${timeOnly(iso(end))}`];
   return (
     <li className="flex items-center gap-3 px-3.5 py-2.5">
       <span className="text-ink-soft w-20 shrink-0 text-[13px]">{day}</span>
-      <span className="text-ink flex-1 text-[15px] font-semibold tabular-nums">{time}</span>
+      <span className="flex flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="text-ink text-[15px] font-semibold whitespace-nowrap tabular-nums">{time}</span>
+        {tag}
+      </span>
       {right}
     </li>
   );
@@ -530,12 +570,7 @@ function ConfirmedBlock({
           <div className="flex flex-wrap gap-2">
             <Dropdown
               label="カレンダーに追加"
-              items={[
-                { label: "Google カレンダー", href: googleCalendarUrl(calendarItem) },
-                { label: "iPhone・Mac（.ics）", onClick: () => downloadIcs(calendarItem) },
-                { label: "Outlook（個人）", href: outlookLiveUrl(calendarItem) },
-                { label: "Outlook（Office365）", href: outlookOffice365Url(calendarItem) },
-              ]}
+              items={calendarMenu(calendarItem)}
             />
             {rsvpOpen && member && (
               attending ? (
