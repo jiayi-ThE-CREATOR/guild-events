@@ -34,6 +34,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       deadline: meeting.deadline,
       status: meeting.status,
       confirmed_start: meeting.confirmed_start,
+      meet_url: meeting.meet_url ?? null,
     },
   };
 

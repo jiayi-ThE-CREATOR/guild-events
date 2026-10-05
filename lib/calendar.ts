@@ -143,3 +143,13 @@ export function calendarMenu(event: CalendarItem): { label: string; href?: strin
     { label: "Outlook（Office365）", href: outlookOffice365Url(event) },
   ];
 }
+
+/** Google Meet のリンクがあれば、場所（空いていれば）と説明の先頭に入れる */
+export function withMeet(item: CalendarItem, meetUrl: string | null | undefined): CalendarItem {
+  if (!meetUrl) return item;
+  return {
+    ...item,
+    location: item.location || meetUrl,
+    description: [`Google Meet：${meetUrl}`, item.description].filter(Boolean).join("\n\n"),
+  };
+}

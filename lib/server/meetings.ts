@@ -33,6 +33,8 @@ export type Meeting = {
   unreadable: string[];
   /** 決定した時間に予定が空いている人。005 以前に決まった会議は null */
   attendees: string[] | null;
+  /** 主催者のアカウントで作った Google Meet のリンク（012）。作っていなければ null */
+  meet_url?: string | null;
   created_at: string;
 };
 

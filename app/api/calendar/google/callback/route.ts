@@ -1,18 +1,23 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getAdmin } from "@/lib/server/admin";
-import { exchangeCode, STATE_COOKIE } from "@/lib/server/google";
+import { exchangeCode, revokeGoogle, STATE_COOKIE } from "@/lib/server/google";
+import { meetHost } from "@/lib/server/meet";
 
-/** Google の同意画面から戻ってくる先。refresh token を保存して元の画面（マイページか招待ページ）へ返す */
+/**
+ * Google の同意画面から戻ってくる先。refresh token を保存して元の画面（マイページか招待ページ）へ返す。
+ * purpose=meet なら Google Meet 用の許可として meet_hosts に保存する
+ */
 export async function GET(req: NextRequest) {
-  let saved: { nonce?: string; owner?: string; back?: string } = {};
+  let saved: { nonce?: string; owner?: string; back?: string; purpose?: string } = {};
   try {
     saved = JSON.parse(req.cookies.get(STATE_COOKIE)?.value ?? "{}");
   } catch {}
   // 戻り先は自分のサイトの中だけ（/mypage か /g/<合言葉>）
   const backPath = saved.back && /^\/(mypage|g\/[A-Za-z0-9_-]+)$/.test(saved.back) ? saved.back : "/mypage";
   const back = new URL(backPath, req.nextUrl.origin);
+  const purpose = saved.purpose === "meet" ? "meet" : "calendar";
   const fail = (reason: string) => {
-    back.searchParams.set("calendar", "error");
+    back.searchParams.set(purpose, "error");
     back.searchParams.set("reason", reason);
     const res = NextResponse.redirect(back);
     res.cookies.delete({ name: STATE_COOKIE, path: "/api/calendar/google" });
@@ -32,7 +37,20 @@ export async function GET(req: NextRequest) {
 
   try {
     const redirectUri = `${req.nextUrl.origin}/api/calendar/google/callback`;
-    const { refreshToken, email } = await exchangeCode(code, redirectUri);
+    const { refreshToken, email } = await exchangeCode(code, redirectUri, purpose);
+    if (purpose === "meet") {
+      // 前の許可があれば Google 側でも取り消してから置き換える
+      const old = await meetHost(admin, saved.owner);
+      const { error } = await admin
+        .from("meet_hosts")
+        .upsert({ member_name: saved.owner, email, refresh_token: refreshToken });
+      if (error) throw new Error(error.message);
+      if (old && old.refresh_token !== refreshToken) await revokeGoogle(old.refresh_token);
+      back.searchParams.set("meet", "connected");
+      const res = NextResponse.redirect(back);
+      res.cookies.delete({ name: STATE_COOKIE, path: "/api/calendar/google" });
+      return res;
+    }
     // 同じ Google アカウントをつなぎ直したら古い token を置き換える
     await admin
       .from("calendar_sources")

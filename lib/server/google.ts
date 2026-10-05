@@ -6,24 +6,31 @@ import type { Busy } from "../slots";
  * scope は「空き時間」と「カレンダー一覧」だけで、どちらも Google の分類で非機密。
  * 予定の件名や場所は API の側で最初から返ってこない。
  * 非機密 scope だけなので Google の審査が要らず、未確認アプリの警告も出ない。
+ *
+ * もう一つ、会議の Google Meet リンクを作るための連携（purpose = "meet"）。
+ * scope は meetings.space.created（この アプリが作った Meet だけを作る・読む）。Google の分類では
+ * 機密なので、同意画面で「確認されていないアプリ」の警告が一度出る。主催者だけがつなぐ。
  */
+
+export type GooglePurpose = "calendar" | "meet";
 
 const CALENDAR_SCOPES = [
   "https://www.googleapis.com/auth/calendar.freebusy",
   "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
 ];
-const SCOPES = ["openid", "email", ...CALENDAR_SCOPES];
+const MEET_SCOPES = ["https://www.googleapis.com/auth/meetings.space.created"];
+const REQUIRED: Record<GooglePurpose, string[]> = { calendar: CALENDAR_SCOPES, meet: MEET_SCOPES };
 
 export function googleConfigured(): boolean {
   return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
 }
 
-export function googleAuthUrl(redirectUri: string, state: string): string {
+export function googleAuthUrl(redirectUri: string, state: string, purpose: GooglePurpose = "calendar"): string {
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID!,
     redirect_uri: redirectUri,
     response_type: "code",
-    scope: SCOPES.join(" "),
+    scope: ["openid", "email", ...REQUIRED[purpose]].join(" "),
     // refresh token を毎回もらうため（2 回目以降の連携でも返ってくるように）
     access_type: "offline",
     prompt: "consent",
@@ -53,7 +60,7 @@ async function tokenRequest(body: Record<string, string>) {
 }
 
 /** 認可コードを refresh token とメールアドレスに換える */
-export async function exchangeCode(code: string, redirectUri: string) {
+export async function exchangeCode(code: string, redirectUri: string, purpose: GooglePurpose = "calendar") {
   const token = await tokenRequest({
     code,
     redirect_uri: redirectUri,
@@ -63,10 +70,10 @@ export async function exchangeCode(code: string, redirectUri: string) {
   // 同意画面では権限ごとにチェックを外せる。外されたまま保存すると
   // 「連携済み」に見えて実はカレンダーが読めない状態になる（実際に起きた）
   const granted = (token.scope ?? "").split(" ");
-  if (!CALENDAR_SCOPES.every((s) => granted.includes(s))) {
+  if (!REQUIRED[purpose].every((s) => granted.includes(s))) {
     await revokeGoogle(token.refresh_token);
     throw new Error(
-      "カレンダーへのアクセスが許可されていませんでした。もう一度つなぎ、同意画面のチェックをすべてオンにしてください",
+      `${purpose === "meet" ? "Google Meet の作成" : "カレンダーへのアクセス"}が許可されていませんでした。もう一度つなぎ、同意画面のチェックをすべてオンにしてください`,
     );
   }
   // id_token は Google から TLS で直接受け取ったものなので、署名検証は省いて中身だけ読む
@@ -148,6 +155,28 @@ export async function googleBusy(refreshToken: string, from: number, to: number)
   return Object.values(calendars).flatMap((c) =>
     (c.busy ?? []).map((b) => ({ start: Date.parse(b.start), end: Date.parse(b.end) })),
   );
+}
+
+/**
+ * Google Meet の会議室を作り、参加用の URL を返す。
+ * 個人アカウントの既定は RESTRICTED（作った本人がいないと他の人はノックしても入れない）なので、
+ * リンクを知っていれば誰でもそのまま入れる OPEN にする
+ */
+export async function createMeetSpace(refreshToken: string): Promise<string> {
+  const { access_token } = await tokenRequest({
+    refresh_token: refreshToken,
+    grant_type: "refresh_token",
+  });
+  const res = await fetch("https://meet.googleapis.com/v2/spaces", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${access_token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ config: { accessType: "OPEN" } }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok) throw new Error(`Google Meet の作成に失敗（${res.status}）: ${(await res.text()).slice(0, 200)}`);
+  const space = (await res.json()) as { meetingUri?: string };
+  if (!space.meetingUri) throw new Error("Google Meet の URL が返ってきませんでした");
+  return space.meetingUri;
 }
 
 /** 同意画面へ送り出した人と、戻ってきた人を照合する cookie */

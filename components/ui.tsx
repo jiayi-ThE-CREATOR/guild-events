@@ -223,3 +223,18 @@ export function Note({ children, className = "" }: { children: React.ReactNode; 
 export function ErrorText({ children }: { children: React.ReactNode }) {
   return <p className="text-amber bg-amber-soft rounded-lg px-3 py-2 text-[13px]">{children}</p>;
 }
+
+/** 会議の Google Meet リンク（見出しの下に置く） */
+export function MeetLink({ url }: { url: string }) {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-navy mt-1.5 inline-flex items-center gap-1.5 text-[13px] font-semibold underline-offset-2 hover:underline"
+    >
+      <span aria-hidden>🎥</span>
+      Google Meet：{url.replace(/^https:\/\//, "")}
+    </a>
+  );
+}

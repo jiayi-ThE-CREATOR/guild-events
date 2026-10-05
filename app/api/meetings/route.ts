@@ -7,6 +7,7 @@ import { getAdmin, NOT_CONFIGURED } from "@/lib/server/admin";
 import { registeredMembers } from "@/lib/server/availability";
 import { notifyOpened } from "@/lib/server/discord";
 import { createGuest, guestNameProblem, MAX_GUESTS } from "@/lib/server/guests";
+import { createMeetFor } from "@/lib/server/meet";
 import { enteredCounts, settleDue, type Meeting } from "@/lib/server/meetings";
 
 const LIST_FIELDS =
@@ -46,6 +47,8 @@ type Body = {
   deadlineHours?: number;
   /** 外部ゲストの名前。作った会議に招待リンク付きで加える */
   guests?: string[];
+  /** 主催者の Google アカウントで Meet リンクを作るか */
+  meet?: boolean;
 };
 
 function invalid(b: Body): string | null {
@@ -102,7 +105,20 @@ export async function POST(req: NextRequest) {
     .select()
     .single();
   if (error) return Response.json({ error: error.message }, { status: 500 });
-  const meeting = data as Meeting;
+  let meeting = data as Meeting;
+
+  // Google Meet リンク。作れなくても会議は作る（会議ページから作り直せる）
+  let meetError: string | null = null;
+  if (b.meet) {
+    try {
+      const url = await createMeetFor(admin, meeting);
+      if (url) meeting = { ...meeting, meet_url: url };
+      else meetError = "主催者が Google Meet をつないでいないため、Meet リンクは作りませんでした";
+    } catch (e) {
+      console.error(`[meetings] Meet の作成に失敗: ${(e as Error).message}`);
+      meetError = "Google Meet リンクを作れませんでした。会議ページから作り直せます";
+    }
+  }
 
   // 外部ゲスト。招待リンクはこの応答でしか返せない（DB にはハッシュだけ）
   const guests: { id: string; name: string; url: string }[] = [];
@@ -127,5 +143,5 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     console.error(`[meetings] 募集開始の通知に失敗: ${(e as Error).message}`);
   }
-  return Response.json({ id: meeting.id, guests: guests.map(({ name, url }) => ({ name, url })) });
+  return Response.json({ id: meeting.id, guests: guests.map(({ name, url }) => ({ name, url })), meetError });
 }

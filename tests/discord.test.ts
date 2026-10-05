@@ -78,6 +78,15 @@ test("募集開始：主催・長さ・候補・結果発表・参加者・未�
   );
 });
 
+test("Meet のリンクがあれば募集開始と決定に載せる", () => {
+  const url = "https://meet.google.com/abc-defg-hij";
+  const open = { ...base, status: "open" as const, meet_url: url };
+  assert.ok(openingMessage(open, [], "u").includes(`🎥 Google Meet：${url}`));
+  const done = { ...base, status: "confirmed" as const, confirmed_start: "2026-09-28T01:00:00Z", attendees: ["a"], meet_url: url };
+  assert.ok(meetingMessage(done, [], "u").includes(`🎥 Google Meet：${url}`));
+  assert.ok(!meetingMessage({ ...done, meet_url: null }, [], "u").includes("🎥"));
+});
+
 test("募集開始：全員連携済みなら未連携の行を出さない", () => {
   const m = { ...base, status: "open" as const };
   assert.ok(!openingMessage(m, [], "u").includes("⚠️"));

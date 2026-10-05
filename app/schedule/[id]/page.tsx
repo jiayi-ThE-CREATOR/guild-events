@@ -7,8 +7,8 @@ import MeetingEntry from "@/components/MeetingEntry";
 import MembersBusyGrid from "@/components/MembersBusyGrid";
 import PageHeader from "@/components/PageHeader";
 import RangesInput, { fromCandidateRanges, rangesReady, toCandidateRanges, type RangeRow } from "@/components/RangesInput";
-import { btn, Dot, DOT, Dropdown, ErrorText, field, Menu, Note, Panel, SectionTitle, Segmented, Tag } from "@/components/ui";
-import { calendarMenu } from "@/lib/calendar";
+import { btn, Dot, DOT, Dropdown, ErrorText, field, MeetLink, Menu, Note, Panel, SectionTitle, Segmented, Tag } from "@/components/ui";
+import { calendarMenu, withMeet } from "@/lib/calendar";
 import { fullDateTime, timeOnly } from "@/lib/format";
 import { labelOf } from "@/lib/guests";
 import { durationLabel, hoursLabel, MEETING_DEADLINE_HOURS, type ParticipantState } from "@/lib/meetings";
@@ -29,6 +29,7 @@ type Meeting = {
   id: string;
   title: string;
   description: string | null;
+  meet_url: string | null;
   location: string | null;
   organizer: string;
   participants: string[];
@@ -118,6 +119,9 @@ export default function MeetingPage() {
     }
   }
 
+  // 主催者のアカウントで Meet を作る（作成時に作らなかった・失敗した会議）
+  const createMeet = () => post("meet", {});
+
   if (!detail) {
     return (
       <div className="md:mx-auto md:max-w-5xl">
@@ -144,6 +148,7 @@ export default function MeetingPage() {
     ...(m.status === "confirmed" ? [{ label: "日時を変更する", onClick: () => setPanel("reschedule") }] : []),
     { label: m.status === "open" ? "募集を延長する" : "募集をやり直す", onClick: () => setPanel("extend") },
     ...(m.status !== "failed" ? [{ label: "外部ゲストを招く・管理", onClick: () => setPanel("guests") }] : []),
+    ...(m.status !== "failed" && !m.meet_url ? [{ label: "Google Meet リンクを作る", onClick: createMeet }] : []),
   ];
 
   return (
@@ -171,6 +176,7 @@ export default function MeetingPage() {
                   </>
                 )}
               </p>
+              {m.meet_url && <MeetLink url={m.meet_url} />}
               {m.description && <p className="text-ink mt-1.5 text-sm leading-relaxed whitespace-pre-wrap">{m.description}</p>}
             </div>
             <Menu items={menuItems} />
@@ -425,15 +431,20 @@ function TentativeAdd({ meeting: m, start }: { meeting: Meeting; start: number }
       label="仮で追加"
       alignRight
       buttonClass={`${btn.text} shrink-0 text-[13px]`}
-      items={calendarMenu({
-        id: `${m.id}-${start}`,
-        title: m.title,
-        description: m.description,
-        location: m.location,
-        event_date: iso(start),
-        duration_min: m.duration_min,
-        tentative: true,
-      })}
+      items={calendarMenu(
+        withMeet(
+          {
+            id: `${m.id}-${start}`,
+            title: m.title,
+            description: m.description,
+            location: m.location,
+            event_date: iso(start),
+            duration_min: m.duration_min,
+            tentative: true,
+          },
+          m.meet_url,
+        ),
+      )}
     />
   );
 }
@@ -574,7 +585,7 @@ function ConfirmedBlock({
           <div className="flex flex-wrap gap-2">
             <Dropdown
               label="カレンダーに追加"
-              items={calendarMenu(calendarItem)}
+              items={calendarMenu(withMeet(calendarItem, m.meet_url))}
             />
             {rsvpOpen && member && (
               attending ? (

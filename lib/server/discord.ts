@@ -34,6 +34,7 @@ export function meetingMessage(
       `📅 **${m.title}** の日程が決まりました`,
       `🗓 ${fullDateTime(m.confirmed_start)}〜${timeOnly(end)}`,
       m.location ? `📍 ${m.location}` : null,
+      m.meet_url ? `🎥 Google Meet：${m.meet_url}` : null,
       `✅ 参加できる（${attendees.length}人）：${attendees.map(name).join("、") || "なし"}`,
       absent.length > 0
         ? `❌ 参加できない（${absent.length}人）：${absent
@@ -70,6 +71,7 @@ export function openingMessage(
     `⏱ 長さ：${durationLabel(m.duration_min)}`,
     `🗓 候補：${meetingRanges(m).map(rangeLabel).join(" / ")}`,
     m.location ? `📍 ${m.location}` : null,
+    m.meet_url ? `🎥 Google Meet：${m.meet_url}` : null,
     `⏰ 結果発表：${fullDateTime(m.deadline)}`,
     `👥 参加者（${m.participants.length}人）：${m.participants.map(name).join("、")}`,
     unconnected.length > 0

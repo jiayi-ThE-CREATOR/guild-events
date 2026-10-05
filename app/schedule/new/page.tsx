@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import NameSelect from "@/components/NameSelect";
@@ -53,6 +54,9 @@ function MeetingForm() {
   const [error, setError] = useState<string | null>(null);
   // 外部ゲスト（メンバー以外）。作成後に招待リンクを 1 回だけ表示する
   const [guests, setGuests] = useState<string[]>([]);
+  // Google Meet リンクを作るか。主催者がマイページで Google Meet をつないでいるときだけ作れる
+  const [meet, setMeet] = useState(true);
+  const [meetHost, setMeetHost] = useState<{ member: string; connected: boolean } | null>(null);
   const [guestName, setGuestName] = useState("");
   const [created, setCreated] = useState<{ id: string; guests: { name: string; url: string }[] } | null>(null);
 
@@ -78,6 +82,20 @@ function MeetingForm() {
     (participants.size > 0 || guests.length > 0) &&
     rangesReady(ranges);
 
+  // 主催者が変わるたびに、Meet をつないでいるかを確かめる
+  useEffect(() => {
+    if (!organizer) return;
+    let alive = true;
+    fetch(`/api/meet?member=${encodeURIComponent(organizer)}`)
+      .then((r) => r.json())
+      .then((j) => alive && setMeetHost({ member: organizer, connected: !!j.connected }))
+      .catch(() => alive && setMeetHost({ member: organizer, connected: false }));
+    return () => {
+      alive = false;
+    };
+  }, [organizer]);
+  const meetReady = meetHost?.member === organizer && meetHost.connected;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!ready || submitting) return;
@@ -97,6 +115,7 @@ function MeetingForm() {
           location,
           description,
           guests,
+          meet: meet && meetReady,
         }),
       });
       const json = await res.json();
@@ -240,6 +259,19 @@ function MeetingForm() {
       <div>
         <label htmlFor="location" className={label}>場所（任意）</label>
         <input id="location" type="text" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Discord / 豊中キャンパス など" className={field} />
+      </div>
+
+      <div>
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={meet && meetReady} disabled={!meetReady} onChange={(e) => setMeet(e.target.checked)} className="size-4" />
+          <span className={`text-[13px] font-semibold ${meetReady ? "text-ink" : "text-ink-soft"}`}>Google Meet リンクを作る</span>
+        </label>
+        {organizer && meetHost?.member === organizer && !meetHost.connected && (
+          <Note className="mt-1">
+            主催者（{organizer}）が Google Meet をつないでいないので作れません。主催者が{" "}
+            <Link href="/mypage" className="text-navy underline">マイページ</Link> でつなぐと作れるようになります。
+          </Note>
+        )}
       </div>
 
       <div>

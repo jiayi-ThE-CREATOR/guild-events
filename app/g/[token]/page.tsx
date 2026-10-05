@@ -4,8 +4,8 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import CalendarConnections from "@/components/CalendarConnections";
 import MeetingEntry from "@/components/MeetingEntry";
-import { btn, Dot, DOT, Dropdown, ErrorText, Note, SectionTitle, Tag } from "@/components/ui";
-import { calendarMenu, type CalendarItem } from "@/lib/calendar";
+import { btn, Dot, DOT, Dropdown, ErrorText, MeetLink, Note, SectionTitle, Tag } from "@/components/ui";
+import { calendarMenu, withMeet, type CalendarItem } from "@/lib/calendar";
 import { fullDateTime, timeOnly } from "@/lib/format";
 import { durationLabel } from "@/lib/meetings";
 import { rangeLabel, type CandidateRange } from "@/lib/ranges";
@@ -28,6 +28,7 @@ type GuestView = {
     deadline: string;
     status: "open" | "confirmed" | "failed";
     confirmed_start: string | null;
+    meet_url: string | null;
   };
   preview?: SlotResult;
   result?: { attending: number; total: number; youAttend: boolean };
@@ -131,6 +132,7 @@ function GuestView() {
             </>
           )}
         </p>
+        {m.meet_url && <MeetLink url={m.meet_url} />}
         {m.description && <p className="text-ink mt-1.5 text-sm leading-relaxed whitespace-pre-wrap">{m.description}</p>}
       </header>
 
@@ -148,7 +150,7 @@ function GuestView() {
             {view.result.youAttend && (
               <Dropdown
                 label="カレンダーに追加"
-                items={calendarMenu(calendarItem)}
+                items={calendarMenu(withMeet(calendarItem, m.meet_url))}
               />
             )}
           </div>
@@ -223,7 +225,10 @@ function GuestView() {
               result={view.preview}
               durationMin={m.duration_min}
               deadline={m.deadline}
-              calendarBase={{ id: token, title: m.title, description: m.description, location: m.location, duration_min: m.duration_min }}
+              calendarBase={withMeet(
+                { id: token, title: m.title, description: m.description, location: m.location, event_date: "", duration_min: m.duration_min },
+                m.meet_url,
+              )}
             />}
         </>
       )}
