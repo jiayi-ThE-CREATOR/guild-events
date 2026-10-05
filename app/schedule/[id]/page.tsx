@@ -140,6 +140,7 @@ export default function MeetingPage() {
 
   const menuItems = [
     ...(m.status === "open" && me && me.state !== "declined" ? [{ label: "予定を手入力する", onClick: () => setPanel("entry") }] : []),
+    ...(m.status === "open" ? [{ label: "募集を締め切って日時を決める", onClick: () => setPanel("reschedule") }] : []),
     ...(m.status === "confirmed" ? [{ label: "日時を変更する", onClick: () => setPanel("reschedule") }] : []),
     { label: m.status === "open" ? "募集を延長する" : "募集をやり直す", onClick: () => setPanel("extend") },
     ...(m.status !== "failed" ? [{ label: "外部ゲストを招く・管理", onClick: () => setPanel("guests") }] : []),
@@ -193,12 +194,15 @@ export default function MeetingPage() {
             <ExtendForm meeting={m} onDone={async () => { setPanel(null); await refresh(); }} />
           </Panel>
         )}
-        {panel === "reschedule" && m.status === "confirmed" && (
-          <Panel title="日時を変更する" onClose={() => { setPanel(null); setPicked(null); }}>
+        {panel === "reschedule" && m.status !== "failed" && (
+          <Panel
+            title={m.status === "open" ? "募集を締め切って日時を決める" : "日時を変更する"}
+            onClose={() => { setPanel(null); setPicked(null); }}
+          >
             <RescheduleForm
               key={picked ?? "none"}
               meeting={m}
-              picked={picked}
+              picked={picked ?? preview?.result.windows[0]?.start ?? null}
               onDone={async () => { setPanel(null); setPicked(null); await refresh(); }}
             />
           </Panel>
@@ -899,8 +903,8 @@ function jstParts(ms: number) {
 }
 
 /**
- * 決まった日時を手で変える。日付と開始時刻は自由（30 分刻み）。
- * 変えると、新しい時間で出欠を計算し直し、あとからの参加登録は消える。Discord にも流れる。
+ * 日時を手で決める（募集中なら募集を締め切る）・変える。日付と開始時刻は自由（30 分刻み）。
+ * 新しい時間で出欠を計算し直し、あとからの参加登録は消える。Discord にも流れる。
  */
 function RescheduleForm({
   meeting: m,
@@ -911,7 +915,12 @@ function RescheduleForm({
   picked: number | null;
   onDone: () => Promise<void>;
 }) {
-  const [initial] = useState(() => jstParts(picked ?? Date.parse(m.confirmed_start ?? "")));
+  const closing = m.status === "open";
+  const [initial] = useState(() => {
+    const ms = picked ?? Date.parse(m.confirmed_start ?? "");
+    // 候補が無い募集中の会議は、次の正時から
+    return jstParts(Number.isNaN(ms) ? Math.ceil(Date.now() / 3_600_000) * 3_600_000 : ms);
+  });
   const [date, setDate] = useState(initial.date);
   const [min, setMin] = useState(initial.min);
   const [saving, setSaving] = useState(false);
@@ -920,7 +929,10 @@ function RescheduleForm({
 
   async function submit() {
     const start = Date.parse(`${date}T00:00:00+09:00`) + min * 60 * 1000;
-    const text = `${fullDateTime(new Date(start).toISOString())}〜 に変更します。\n新しい時間で出欠を計算し直し、Discord にも流れます。よろしいですか？`;
+    const when = fullDateTime(new Date(start).toISOString());
+    const text = closing
+      ? `募集を締め切って、${when}〜 に決めます。\nこの時間でみんなの予定から出欠を出し、Discord にも流れます。よろしいですか？`
+      : `${when}〜 に変更します。\n新しい時間で出欠を計算し直し、Discord にも流れます。よろしいですか？`;
     if (!window.confirm(text)) return;
     setSaving(true);
     setError(null);
@@ -941,7 +953,11 @@ function RescheduleForm({
 
   return (
     <div className="space-y-3">
-      <Note>候補の外の日時にもできます。新しい時間でみんなの予定から出欠を計算し直します（あとから押した「参加する／やめる」は消えます）。</Note>
+      <Note>
+        {closing
+          ? "結果発表を待たずに、ここで日時を決めます。候補の外の日時にもできます。決めた時間でみんなの予定から出欠を出します。"
+          : "候補の外の日時にもできます。新しい時間でみんなの予定から出欠を計算し直します（あとから押した「参加する／やめる」は消えます）。"}
+      </Note>
       <div className="flex flex-wrap items-center gap-2">
         <input aria-label="日付" type="date" value={date} onChange={(e) => setDate(e.target.value)} className={`${field} w-auto`} />
         <select aria-label="開始時刻" value={min} onChange={(e) => setMin(Number(e.target.value))} className={`${field} w-auto`}>
@@ -953,7 +969,7 @@ function RescheduleForm({
       </div>
       {error && <ErrorText>{error}</ErrorText>}
       <button type="button" disabled={saving || !date} onClick={submit} className={`${btn.primary} w-full`}>
-        {saving ? "変更中…" : "この日時に変更する"}
+        {saving ? "保存中…" : closing ? "締め切ってこの日時に決める" : "この日時に変更する"}
       </button>
     </div>
   );

@@ -2,12 +2,14 @@ import type { NextRequest } from "next/server";
 import { freeMembers, JST_OFFSET_MS } from "@/lib/slots";
 import { getAdmin, NOT_CONFIGURED } from "@/lib/server/admin";
 import { availability } from "@/lib/server/availability";
-import { notifyRescheduled } from "@/lib/server/discord";
+import { notifyDiscord, notifyRescheduled } from "@/lib/server/discord";
 import { meetingMembers } from "@/lib/server/guests";
 import { declinesOf, type Meeting } from "@/lib/server/meetings";
 
 /**
- * 決まった日時を手で変える。日付と開始時刻は自由（30 分刻み・今より後・その日のうちに終わる）。
+ * 日時を手で決める・変える。募集中の会議なら、ここで募集を締め切ってこの日時に決める
+ * （結果発表の時刻は今にする。Discord には自動で決まったときと同じ「決定」を流す）。
+ * 決まった会議なら日時を変える。日付と開始時刻は自由（30 分刻み・今より後・その日のうちに終わる）。
  * 新しい時間で、今のカレンダーから「参加できる／できない」を計算し直す。
  * 前の日時に対するあとからの参加登録は消す（別の時間への返事なので）。Discord に流す。
  */
@@ -29,8 +31,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (error) return Response.json({ error: error.message }, { status: 500 });
   const meeting = data as Meeting | null;
   if (!meeting) return Response.json({ error: "会議が見つかりません" }, { status: 404 });
-  if (meeting.status !== "confirmed" || !meeting.confirmed_start) {
-    return Response.json({ error: "日時が決まった会議だけ変えられます" }, { status: 409 });
+  const closing = meeting.status === "open";
+  if (!closing && (meeting.status !== "confirmed" || !meeting.confirmed_start)) {
+    return Response.json({ error: "募集中か、日時が決まった会議だけ決められます" }, { status: 409 });
   }
 
   // 新しい時間を「その日のその時間帯だけ」の候補として、今のカレンダーで出欠を出す
@@ -62,17 +65,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       confirmed_total: result.total,
       excluded: unconnected,
       unreadable,
+      ...(closing ? { status: "confirmed", deadline: new Date().toISOString() } : {}),
     })
     .eq("id", id)
-    .eq("status", "confirmed")
+    .eq("status", meeting.status)
     .select()
-    .single();
+    .maybeSingle();
   if (writeError) return Response.json({ error: writeError.message }, { status: 500 });
+  // 同時に自動で決まった・ほかの人が先に決めたなど
+  if (!updated) return Response.json({ error: "会議の状態が変わりました。ページを開き直してください" }, { status: 409 });
+
+  if (closing) {
+    await notifyDiscord({ ...(updated as Meeting), participants: keys }, declined, req.nextUrl.origin, labels);
+    return Response.json({ ok: true });
+  }
 
   await admin.from("meeting_rsvps").delete().eq("meeting_id", id);
   await notifyRescheduled(
     { ...(updated as Meeting), participants: keys },
-    meeting.confirmed_start,
+    meeting.confirmed_start!,
     declined,
     req.nextUrl.origin,
     labels,
