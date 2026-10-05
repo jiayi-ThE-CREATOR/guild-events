@@ -9,7 +9,8 @@ import { declinesOf, type Meeting } from "@/lib/server/meetings";
 /**
  * 日時を手で決める・変える。募集中の会議なら、ここで募集を締め切ってこの日時に決める
  * （結果発表の時刻は今にする。Discord には自動で決まったときと同じ「決定」を流す）。
- * 決まった会議なら日時を変える。日付と開始時刻は自由（30 分刻み・今より後・その日のうちに終わる）。
+ * 決まった会議なら日時を変える。日付・開始・終了は自由（30 分刻み・今より後・その日のうちに終わる）。
+ * 終了を渡すと会議の長さもそれに変える（募集時の長さに縛らない）。
  * 新しい時間で、今のカレンダーから「参加できる／できない」を計算し直す。
  * 前の日時に対するあとからの参加登録は消す（別の時間への返事なので）。Discord に流す。
  */
@@ -19,7 +20,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const admin = getAdmin();
   if (!admin) return Response.json({ error: NOT_CONFIGURED }, { status: 503 });
   const { id } = await params;
-  const { start } = (await req.json()) as { start?: string };
+  const { start, end } = (await req.json()) as { start?: string; end?: string };
 
   const startMs = Date.parse(start ?? "");
   if (Number.isNaN(startMs) || startMs % HALF_HOUR !== 0) {
@@ -36,12 +37,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return Response.json({ error: "募集中か、日時が決まった会議だけ決められます" }, { status: 409 });
   }
 
+  // 終了が無ければ今の長さのまま
+  const endMs = end === undefined ? startMs + meeting.duration_min * 60 * 1000 : Date.parse(end);
+  if (Number.isNaN(endMs) || endMs % HALF_HOUR !== 0 || endMs <= startMs) {
+    return Response.json({ error: "終了時刻は開始より後にしてください（30 分刻み）" }, { status: 400 });
+  }
+  const durationMin = (endMs - startMs) / 60_000;
+
   // 新しい時間を「その日のその時間帯だけ」の候補として、今のカレンダーで出欠を出す
-  const endMs = startMs + meeting.duration_min * 60 * 1000;
   const jst = new Date(startMs + JST_OFFSET_MS);
   const date = jst.toISOString().slice(0, 10);
   const startMin = jst.getUTCHours() * 60 + jst.getUTCMinutes();
-  const endMin = startMin + meeting.duration_min;
+  const endMin = startMin + durationMin;
   if (endMin > 24 * 60) return Response.json({ error: "その日のうちに終わる時間にしてください" }, { status: 400 });
 
   const declined = await declinesOf(admin, id);
@@ -50,7 +57,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { result, unconnected, unreadable, busyByMember } = await availability(
     admin,
     members,
-    { durationMin: meeting.duration_min, ranges: [{ fromDate: date, toDate: date, dayStartMin: startMin, dayEndMin: endMin }] },
+    { durationMin, ranges: [{ fromDate: date, toDate: date, dayStartMin: startMin, dayEndMin: endMin }] },
     0,
     meeting.id,
   );
@@ -60,6 +67,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .from("meetings")
     .update({
       confirmed_start: new Date(startMs).toISOString(),
+      duration_min: durationMin,
       attendees: keys.filter((k) => free.includes(k)),
       confirmed_available: free.length,
       confirmed_total: result.total,

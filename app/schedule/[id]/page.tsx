@@ -923,16 +923,22 @@ function RescheduleForm({
   });
   const [date, setDate] = useState(initial.date);
   const [min, setMin] = useState(initial.min);
+  // 終了（その日の 0:00 からの分）。初期値は今の会議の長さぶん後
+  const [endMin, setEndMin] = useState(() => Math.min(initial.min + Math.ceil(m.duration_min / 30) * 30, 24 * 60));
+  const endOptions = [...HALF_HOURS, 24 * 60].filter((x) => x > min);
+  const validEnd = endMin > min && endMin <= 24 * 60;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hm = (x: number) => `${Math.floor(x / 60)}:${String(x % 60).padStart(2, "0")}`;
 
   async function submit() {
-    const start = Date.parse(`${date}T00:00:00+09:00`) + min * 60 * 1000;
-    const when = fullDateTime(new Date(start).toISOString());
+    const dayStart = Date.parse(`${date}T00:00:00+09:00`);
+    const start = dayStart + min * 60 * 1000;
+    const end = dayStart + endMin * 60 * 1000;
+    const when = `${fullDateTime(new Date(start).toISOString())}–${hm(endMin)}`;
     const text = closing
-      ? `募集を締め切って、${when}〜 に決めます。\nこの時間でみんなの予定から出欠を出し、Discord にも流れます。よろしいですか？`
-      : `${when}〜 に変更します。\n新しい時間で出欠を計算し直し、Discord にも流れます。よろしいですか？`;
+      ? `募集を締め切って、${when} に決めます。\nこの時間でみんなの予定から出欠を出し、Discord にも流れます。よろしいですか？`
+      : `${when} に変更します。\n新しい時間で出欠を計算し直し、Discord にも流れます。よろしいですか？`;
     if (!window.confirm(text)) return;
     setSaving(true);
     setError(null);
@@ -940,7 +946,7 @@ function RescheduleForm({
       const res = await fetch(`/api/meetings/${m.id}/reschedule`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ start: new Date(start).toISOString() }),
+        body: JSON.stringify({ start: new Date(start).toISOString(), end: new Date(end).toISOString() }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
       await onDone();
@@ -960,15 +966,33 @@ function RescheduleForm({
       </Note>
       <div className="flex flex-wrap items-center gap-2">
         <input aria-label="日付" type="date" value={date} onChange={(e) => setDate(e.target.value)} className={`${field} w-auto`} />
-        <select aria-label="開始時刻" value={min} onChange={(e) => setMin(Number(e.target.value))} className={`${field} w-auto`}>
-          {HALF_HOURS.map((x) => (
-            <option key={x} value={x}>{hm(x)}</option>
-          ))}
-        </select>
-        <span className="text-ink-soft text-[13px]">から {durationLabel(m.duration_min)}</span>
+        <div className="flex items-center gap-2">
+          <select
+            aria-label="開始時刻"
+            value={min}
+            onChange={(e) => {
+              // 開始を動かしたら、長さを保ったまま終了も動かす
+              const next = Number(e.target.value);
+              setEndMin(Math.min(next + (endMin - min > 0 ? endMin - min : 60), 24 * 60));
+              setMin(next);
+            }}
+            className={`${field} w-auto`}
+          >
+            {HALF_HOURS.map((x) => (
+              <option key={x} value={x}>{hm(x)}</option>
+            ))}
+          </select>
+          <span className="text-ink-soft">–</span>
+          <select aria-label="終了時刻" value={endMin} onChange={(e) => setEndMin(Number(e.target.value))} className={`${field} w-auto`}>
+            {endOptions.map((x) => (
+              <option key={x} value={x}>{hm(x)}</option>
+            ))}
+          </select>
+          {validEnd && <span className="text-ink-soft text-[13px] whitespace-nowrap">{durationLabel(endMin - min)}</span>}
+        </div>
       </div>
       {error && <ErrorText>{error}</ErrorText>}
-      <button type="button" disabled={saving || !date} onClick={submit} className={`${btn.primary} w-full`}>
+      <button type="button" disabled={saving || !date || !validEnd} onClick={submit} className={`${btn.primary} w-full`}>
         {saving ? "保存中…" : closing ? "締め切ってこの日時に決める" : "この日時に変更する"}
       </button>
     </div>
