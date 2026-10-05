@@ -231,10 +231,11 @@ export function MeetLink({ url }: { url: string }) {
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-navy mt-1.5 inline-flex items-center gap-1.5 text-[13px] font-semibold underline-offset-2 hover:underline"
+      className="text-navy mt-1.5 inline-flex flex-wrap items-center gap-x-1.5 text-[13px] font-semibold underline-offset-2 hover:underline"
     >
       <span aria-hidden>🎥</span>
-      Google Meet：{url.replace(/^https:\/\//, "")}
+      <span className="whitespace-nowrap">Google Meet で参加</span>
+      <span className="text-ink-soft font-normal whitespace-nowrap">{url.replace(/^https:\/\/meet\.google\.com\//, "")}</span>
     </a>
   );
 }
