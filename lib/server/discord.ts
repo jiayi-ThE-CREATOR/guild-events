@@ -7,7 +7,7 @@ import type { Meeting } from "./meetings";
 /**
  * 会議の募集開始と決定を Discord のチャンネルに流す（Webhook）。
  * DISCORD_WEBHOOK_URL が無ければ何もしない。失敗しても決定そのものは止めない。
- * メンションは一切飛ばさない（allowed_mentions を空にする）。
+ * メンションは募集開始の @everyone だけ。ほかの通知は allowed_mentions を空にして一切飛ばさない。
  */
 
 function reasonOf(m: Meeting, name: string): string {
@@ -56,7 +56,7 @@ export function meetingMessage(
 }
 
 
-/** 募集開始。予定未登録の参加者は名前を挙げて、結果発表までに登録してもらう */
+/** 募集開始（先頭で @everyone）。予定未登録の参加者は名前を挙げて、結果発表までに登録してもらう */
 export function openingMessage(
   m: Meeting,
   unconnected: string[],
@@ -65,7 +65,7 @@ export function openingMessage(
 ): string {
   const name = (k: string) => labelOf(labels, k);
   return [
-    `📣 **${m.title}** の日程調整を始めました`,
+    `@everyone 📣 **${m.title}** の日程調整を始めました`,
     `👤 主催：${m.organizer}`,
     `⏱ 長さ：${durationLabel(m.duration_min)}`,
     `🗓 候補：${meetingRanges(m).map(rangeLabel).join(" / ")}`,
@@ -154,14 +154,17 @@ export async function notifyRescheduled(
   await post(rescheduleMessage(m, previousStart, declined, `${origin}/schedule/${m.id}`, labels));
 }
 
-async function post(content: string) {
+async function post(content: string, mentionEveryone = false) {
   const webhook = process.env.DISCORD_WEBHOOK_URL;
   if (!webhook) return;
   try {
     const res = await fetch(webhook, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: content.slice(0, 2000), allowed_mentions: { parse: [] } }),
+      body: JSON.stringify({
+        content: content.slice(0, 2000),
+        allowed_mentions: { parse: mentionEveryone ? ["everyone"] : [] },
+      }),
       signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) console.error(`[discord] 投稿に失敗（${res.status}）: ${await res.text()}`);
@@ -195,5 +198,5 @@ export async function notifyOpened(
   origin: string,
   labels: Record<string, string> = {},
 ) {
-  await post(openingMessage(m, unconnected, `${origin}/schedule/${m.id}`, labels));
+  await post(openingMessage(m, unconnected, `${origin}/schedule/${m.id}`, labels), true);
 }
