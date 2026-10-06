@@ -5,6 +5,7 @@ import { meetingMembers } from "@/lib/server/guests";
 import { manualMembers } from "@/lib/server/manual";
 import { declinesOf, rangeOf, rsvpsOf, settle, type Meeting } from "@/lib/server/meetings";
 import { applyRsvps } from "@/lib/rsvp";
+import { filesOf } from "@/lib/server/files";
 
 /**
  * 会議の詳細。参加者ごとの状態（カレンダー連携／手動入力／未登録／読み込めない／不参加）と、
@@ -81,5 +82,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     !!meeting.confirmed_start &&
     Date.parse(meeting.confirmed_start) + meeting.duration_min * 60 * 1000 > Date.now();
 
-  return Response.json({ meeting, participants, preview, rsvpOpen, labels });
+  const files = await filesOf(admin, id);
+  return Response.json({ meeting, participants, preview, rsvpOpen, labels, files });
 }

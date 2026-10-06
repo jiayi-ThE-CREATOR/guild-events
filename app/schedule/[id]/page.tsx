@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import MeetingEntry from "@/components/MeetingEntry";
+import MeetingFiles, { type FileItem } from "@/components/MeetingFiles";
 import MembersBusyGrid from "@/components/MembersBusyGrid";
 import PageHeader from "@/components/PageHeader";
 import RangesInput, { fromCandidateRanges, rangesReady, toCandidateRanges, type RangeRow } from "@/components/RangesInput";
@@ -56,6 +57,7 @@ type Detail = {
   rsvpOpen: boolean;
   /** 外部ゲストのキー（guest:<id>）→「名前（ゲスト）」 */
   labels: Record<string, string>;
+  files: FileItem[];
 };
 
 type PanelKind = "entry" | "extend" | "reschedule" | "guests";
@@ -272,6 +274,16 @@ export default function MeetingPage() {
             </div>
           </>
         )}
+
+        <div className="border-line mt-8 border-t pt-4">
+          <MeetingFiles
+            files={detail.files}
+            downloadBase={`/api/meetings/${m.id}/files`}
+            meetingId={m.id}
+            uploader={isClient && profile ? profile.name : null}
+            onChanged={refresh}
+          />
+        </div>
       </div>
     </div>
   );

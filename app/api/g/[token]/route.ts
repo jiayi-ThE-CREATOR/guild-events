@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { meetingRanges } from "@/lib/ranges";
 import { applyRsvps } from "@/lib/rsvp";
 import { availability } from "@/lib/server/availability";
+import { filesOf } from "@/lib/server/files";
 import { loadGuest } from "@/lib/server/guest-access";
 import { meetingMembers } from "@/lib/server/guests";
 import { declinesOf, rangeOf, rsvpsOf, settle } from "@/lib/server/meetings";
@@ -36,6 +37,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       confirmed_start: meeting.confirmed_start,
       meet_url: meeting.meet_url ?? null,
     },
+    files: (await filesOf(admin, meeting.id)).map(({ id, name, size, created_at }) => ({ id, name, size, created_at })),
   };
 
   if (meeting.status === "open") {

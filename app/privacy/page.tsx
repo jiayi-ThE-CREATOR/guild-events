@@ -16,7 +16,7 @@ export default function PrivacyPage() {
   return (
     <article className="px-4 pt-6 pb-10 md:mx-auto md:max-w-3xl md:px-0 md:pt-0">
       <h1 className="text-ink text-2xl font-bold">プライバシーポリシー</h1>
-      <p className="text-ink-soft mt-1 text-xs">制定日：2026年9月25日・改定日：2026年10月3日</p>
+      <p className="text-ink-soft mt-1 text-xs">制定日：2026年9月25日・改定日：2026年10月6日</p>
 
       <p className={`${p} mt-5`}>
         GUILD イベント（以下「本サービス」）は、阪大 × 京大 AIコミュニティ「GUILD」の
@@ -46,6 +46,16 @@ export default function PrivacyPage() {
           「毎週の予定」「この会議の予定」に手動で入れた場合：30 分ごとの予定あり／空いているの区別
           （予定の内容は入力しません）
         </li>
+        <li>
+          Google Meet をつないだ場合：Google アカウントのメールアドレス。要求する権限は
+          「本サービスが作った Meet の会議室の作成・参照」のみで、主催する会議の Meet リンクを作るためだけに使います
+        </li>
+        <li>
+          会議に資料を追加した場合：ファイル本体・ファイル名・大きさ・追加した人の名前
+        </li>
+        <li>
+          マイページの「メール通知」にメールアドレスを入れた場合：そのメールアドレス
+        </li>
       </ul>
       <p className={`${p} mt-2`}>
         Google カレンダーについては、予定の件名・場所・参加者・説明などの内容を取得しません。
@@ -58,6 +68,10 @@ export default function PrivacyPage() {
       <p className={p}>
         カレンダーから得た情報は、日程調整機能で「参加者全員（または 1 人を除く全員）が
         参加できる時間」を計算するためだけに使います。広告、分析、その他の目的には使いません。
+      </p>
+      <p className={`${p} mt-2`}>
+        メールアドレス（マイページで入れたもの、またはカレンダー連携・Google Meet 連携で得たもの。Gmail を優先）は、
+        参加する会議に資料が追加されたことを知らせるためだけに使います。通知はマイページでいつでも止められます。
       </p>
 
       <h2 className={h2}>3. 他のメンバーへの表示</h2>
@@ -87,6 +101,11 @@ export default function PrivacyPage() {
         <li>
           外部カレンダーの空き時間は保存しません。計算のたびに取得し、計算後に破棄します。
           手動で入れた予定は、同じデータベースに保存し、本人が消すか会議が削除されるまで残ります。
+        </li>
+        <li>
+          会議の資料は Supabase のストレージ（非公開）に保存します。ダウンロードのたびに
+          短時間だけ有効なリンクを発行し、会議ページで「削除」されるまで残ります。
+          会議ページと、その会議に招かれた外部ゲストの招待ページから見られます。
         </li>
       </ul>
 

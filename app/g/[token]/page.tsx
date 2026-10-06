@@ -3,6 +3,7 @@
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import CalendarConnections from "@/components/CalendarConnections";
+import MeetingFiles, { type FileItem } from "@/components/MeetingFiles";
 import MeetingEntry from "@/components/MeetingEntry";
 import { btn, Dot, DOT, Dropdown, ErrorText, MeetLink, Note, SectionTitle, Tag } from "@/components/ui";
 import { calendarMenu, withMeet, type CalendarItem } from "@/lib/calendar";
@@ -30,6 +31,7 @@ type GuestView = {
     confirmed_start: string | null;
     meet_url: string | null;
   };
+  files: FileItem[];
   preview?: SlotResult;
   result?: { attending: number; total: number; youAttend: boolean };
 };
@@ -231,6 +233,12 @@ function GuestView() {
               )}
             />}
         </>
+      )}
+
+      {view.files.length > 0 && (
+        <div className="border-line mt-8 border-t pt-4">
+          <MeetingFiles files={view.files} downloadBase={`/api/g/${token}/files`} />
+        </div>
       )}
     </div>
   );

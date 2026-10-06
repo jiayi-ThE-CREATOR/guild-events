@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/Badge";
 import CalendarConnections from "@/components/CalendarConnections";
 import GoogleMeetConnection from "@/components/GoogleMeetConnection";
+import NotifySettings from "@/components/NotifySettings";
 import WeeklySchedule from "@/components/WeeklySchedule";
 import NameSelect from "@/components/NameSelect";
 import { cancelApplication, listApplicationsByName } from "@/lib/data";
@@ -229,6 +230,10 @@ export default function MyPage() {
 
       <div className="mt-8 px-4 md:mt-10 md:px-0">
         <GoogleMeetConnection member={profile.name} />
+      </div>
+
+      <div className="mt-8 px-4 md:mt-10 md:px-0">
+        <NotifySettings member={profile.name} />
       </div>
     </div>
   );

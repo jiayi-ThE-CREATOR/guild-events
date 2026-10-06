@@ -9,7 +9,9 @@ import PageHeader from "@/components/PageHeader";
 import { btn, Dot, ErrorText, field, Note } from "@/components/ui";
 import { MEETING_DEADLINE_HOURS, hoursLabel } from "@/lib/meetings";
 import { MEMBERS } from "@/lib/members";
+import { sizeLabel } from "@/lib/notify-email";
 import { loadProfile } from "@/lib/profile";
+import { MAX_UPLOAD_BYTES, uploadMeetingFiles } from "@/lib/upload";
 import { useIsClient } from "@/lib/useIsClient";
 
 /** 会議を作る。作った時点で募集中になり、選んだ時間が経つと自動で日時が決まる */
@@ -56,6 +58,9 @@ function MeetingForm() {
   const [guests, setGuests] = useState<string[]>([]);
   // Google Meet リンクを作るか。主催者がマイページで Google Meet をつないでいるときだけ作れる
   const [meet, setMeet] = useState(true);
+  // 一緒に付ける資料。会議を作ったあとに上げる（上げた人は主催者として記録）
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const [uploading, setUploading] = useState<string | null>(null);
   const [meetHost, setMeetHost] = useState<{ member: string; connected: boolean } | null>(null);
   const [guestName, setGuestName] = useState("");
   const [created, setCreated] = useState<{ id: string; guests: { name: string; url: string }[] } | null>(null);
@@ -80,7 +85,8 @@ function MeetingForm() {
     organizer !== "" &&
     // メンバーを選ばなくても、外部ゲストがいれば作れる
     (participants.size > 0 || guests.length > 0) &&
-    rangesReady(ranges);
+    rangesReady(ranges) &&
+    attachments.every((f) => f.size <= MAX_UPLOAD_BYTES);
 
   // 主催者が変わるたびに、Meet をつないでいるかを確かめる
   useEffect(() => {
@@ -120,6 +126,17 @@ function MeetingForm() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error);
+      if (attachments.length > 0) {
+        try {
+          setUploading(`資料を上げています… 0/${attachments.length}`);
+          await uploadMeetingFiles(json.id, attachments, organizer, (n) =>
+            setUploading(`資料を上げています… ${n}/${attachments.length}`),
+          );
+        } catch (e) {
+          // 会議はできているので先へ進む。資料は会議ページから上げ直せる
+          window.alert(`会議は作りましたが、資料を上げられませんでした（${(e as Error).message}）。会議ページから追加してください。`);
+        }
+      }
       if (json.guests?.length > 0) setCreated(json);
       else router.replace(`/schedule/${json.id}`);
     } catch (err) {
@@ -279,10 +296,42 @@ function MeetingForm() {
         <textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} placeholder="話すこと、準備してほしいことなど" className={field} />
       </div>
 
+      <div>
+        <span className={label}>資料（任意・{attachments.length}件）</span>
+        {attachments.length > 0 && (
+          <ul className="border-line divide-line mb-2 divide-y rounded-lg border bg-white">
+            {attachments.map((f, i) => (
+              <li key={`${f.name}-${i}`} className="flex items-center gap-2 px-3 py-2 text-[13px]">
+                <span className="text-ink min-w-0 flex-1 truncate">{f.name}</span>
+                <span className={`shrink-0 ${f.size > MAX_UPLOAD_BYTES ? "text-amber font-semibold" : "text-ink-soft"}`}>
+                  {f.size > MAX_UPLOAD_BYTES ? "50MB 超" : sizeLabel(f.size)}
+                </span>
+                <button type="button" aria-label={`${f.name}を外す`} onClick={() => setAttachments(attachments.filter((_, j) => j !== i))} className="text-ink-soft px-1">
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <label className={`${btn.secondary} cursor-pointer`}>
+          ＋ ファイルを選ぶ
+          <input
+            type="file"
+            multiple
+            className="sr-only"
+            onChange={(e) => {
+              setAttachments([...attachments, ...(e.target.files ? [...e.target.files] : [])]);
+              e.target.value = "";
+            }}
+          />
+        </label>
+        <Note className="mt-1.5">1 ファイル 50MB まで。会議を作ると、参加者にメールで知らせます。</Note>
+      </div>
+
       {error && <ErrorText>{error}</ErrorText>}
 
       <button type="submit" disabled={!ready || submitting} className={`${btn.primary} w-full py-3`}>
-        {submitting ? "作成中…" : "この会議で募集を始める"}
+        {uploading ?? (submitting ? "作成中…" : "この会議で募集を始める")}
       </button>
     </form>
   );
