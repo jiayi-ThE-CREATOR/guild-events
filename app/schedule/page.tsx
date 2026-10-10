@@ -45,11 +45,16 @@ export default function MeetingListPage() {
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
           <h1 className="text-ink text-xl font-bold md:text-2xl">ミーティング</h1>
-          <Note>会議を作ると、結果発表の時刻にみんなの予定から日時が自動で決まります。</Note>
+          <Note>募集を作ると、結果発表の時刻にみんなの予定から日時が自動で決まります。日時がもう決まっているなら、決定済みの会議をすぐ作れます。</Note>
         </div>
-        <Link href="/schedule/new" className={`${btn.primary} shrink-0`}>
-          ＋ 会議を作る
-        </Link>
+        <div className="flex shrink-0 flex-col gap-1.5 sm:flex-row">
+          <Link href="/schedule/new" className={`${btn.primary} text-center`}>
+            ＋ 募集を作る
+          </Link>
+          <Link href="/schedule/new?fixed=1" className={`${btn.secondary} text-center`}>
+            ＋ 決定済みの会議を作る
+          </Link>
+        </div>
       </div>
 
       <div className="mt-4 flex items-center justify-between gap-2">

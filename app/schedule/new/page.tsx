@@ -14,20 +14,27 @@ import { loadProfile } from "@/lib/profile";
 import { MAX_UPLOAD_BYTES, uploadMeetingFiles } from "@/lib/upload";
 import { useIsClient } from "@/lib/useIsClient";
 
-/** 会議を作る。作った時点で募集中になり、選んだ時間が経つと自動で日時が決まる */
+/**
+ * 会議を作る。作った時点で募集中になり、選んだ時間が経つと自動で日時が決まる。
+ * 日時がもう決まっているなら、募集をせずにその日時で決まった会議として作れる。
+ */
 
 const DURATIONS = [30, 60, 90, 120];
 
-
+/** 日時を 30 分刻みの選択肢にするための値 */
+const HALF_HOURS = Array.from({ length: 48 }, (_, i) => i * 30);
+const hm = (x: number) => `${Math.floor(x / 60)}:${String(x % 60).padStart(2, "0")}`;
 
 export default function NewMeetingPage() {
   // 既定の日付・主催者は開いた時点・この端末の登録で決めたいので、描画はクライアントだけ
   const isClient = useIsClient();
+  // ?fixed=1 は「決定済みの会議を作る」から来たとき
+  const fixed = isClient && new URLSearchParams(window.location.search).get("fixed") === "1";
   return (
     <div className="md:mx-auto md:max-w-xl">
-      <PageHeader title="会議を作成" />
+      <PageHeader title={fixed ? "決定済みの会議を作成" : "募集を作成"} />
       {isClient ? (
-        <MeetingForm />
+        <MeetingForm fixed={fixed} />
       ) : (
         <p className="text-ink-soft py-16 text-center text-xs">読み込み中…</p>
       )}
@@ -35,7 +42,7 @@ export default function NewMeetingPage() {
   );
 }
 
-function MeetingForm() {
+function MeetingForm({ fixed }: { fixed: boolean }) {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [organizer, setOrganizer] = useState(() => loadProfile()?.name ?? "");
@@ -50,6 +57,12 @@ function MeetingForm() {
   const [ranges, setRanges] = useState<RangeRow[]>(() => [
     { fromDate: jstDate(3), toDate: jstDate(9), startHour: 9, endHour: 21 },
   ]);
+  // 日時がもう決まっているときは募集をしない。日付と開始・終了（その日の 0:00 からの分）
+  const [fixedDate, setFixedDate] = useState(() => jstDate(1));
+  const [fixedStart, setFixedStart] = useState(13 * 60);
+  const [fixedEnd, setFixedEnd] = useState(14 * 60);
+  const fixedStartMs = Date.parse(`${fixedDate}T00:00:00+09:00`) + fixedStart * 60 * 1000;
+  const fixedEndMs = Date.parse(`${fixedDate}T00:00:00+09:00`) + fixedEnd * 60 * 1000;
   const [location, setLocation] = useState("");
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -85,7 +98,7 @@ function MeetingForm() {
     organizer !== "" &&
     // メンバーを選ばなくても、外部ゲストがいれば作れる
     (participants.size > 0 || guests.length > 0) &&
-    rangesReady(ranges) &&
+    (fixed ? fixedDate !== "" && fixedEnd > fixedStart : rangesReady(ranges)) &&
     attachments.every((f) => f.size <= MAX_UPLOAD_BYTES);
 
   // 主催者が変わるたびに、Meet をつないでいるかを確かめる
@@ -115,9 +128,9 @@ function MeetingForm() {
           title,
           organizer,
           participants: MEMBERS.filter((m) => participants.has(m)),
-          durationMin,
-          deadlineHours,
-          ranges: toCandidateRanges(ranges),
+          ...(fixed
+            ? { fixed: { start: new Date(fixedStartMs).toISOString(), end: new Date(fixedEndMs).toISOString() } }
+            : { durationMin, deadlineHours, ranges: toCandidateRanges(ranges) }),
           location,
           description,
           guests,
@@ -248,6 +261,39 @@ function MeetingForm() {
         <Note className="mt-1.5">作成すると一人ずつ招待リンクができます。相手に送ると、ログイン無しで予定を入れてもらえます。</Note>
       </div>
 
+      {fixed ? (
+        <div>
+          <span className={label}>日時{req}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <input aria-label="日付" type="date" value={fixedDate} onChange={(e) => setFixedDate(e.target.value)} className={`${field} w-auto`} />
+            <div className="flex items-center gap-2">
+              <select
+                aria-label="開始時刻"
+                value={fixedStart}
+                onChange={(e) => {
+                  // 開始を動かしたら、長さを保ったまま終了も動かす
+                  const next = Number(e.target.value);
+                  setFixedEnd(Math.min(next + (fixedEnd - fixedStart > 0 ? fixedEnd - fixedStart : 60), 24 * 60));
+                  setFixedStart(next);
+                }}
+                className={`${field} w-auto`}
+              >
+                {HALF_HOURS.map((x) => (
+                  <option key={x} value={x}>{hm(x)}</option>
+                ))}
+              </select>
+              <span className="text-ink-soft">–</span>
+              <select aria-label="終了時刻" value={fixedEnd} onChange={(e) => setFixedEnd(Number(e.target.value))} className={`${field} w-auto`}>
+                {[...HALF_HOURS, 24 * 60].filter((x) => x > fixedStart).map((x) => (
+                  <option key={x} value={x}>{hm(x)}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <Note className="mt-1.5">募集をせず、この日時に決まった会議として作ります。作った時点のみんなの予定から出欠を出し、Discord には「決定」が流れます。</Note>
+        </div>
+      ) : (
+      <>
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label htmlFor="duration" className={label}>会議の長さ</label>
@@ -272,6 +318,8 @@ function MeetingForm() {
         <RangesInput ranges={ranges} onChange={setRanges} field={field} />
         <Note className="mt-1.5">1 日だけなら、始まりと終わりを同じ日に。結果発表より後の時間から、一番早くそろう時間に決まります。</Note>
       </div>
+      </>
+      )}
 
       <div>
         <label htmlFor="location" className={label}>場所（任意）</label>
@@ -331,7 +379,7 @@ function MeetingForm() {
       {error && <ErrorText>{error}</ErrorText>}
 
       <button type="submit" disabled={!ready || submitting} className={`${btn.primary} w-full py-3`}>
-        {uploading ?? (submitting ? "作成中…" : "この会議で募集を始める")}
+        {uploading ?? (submitting ? "作成中…" : fixed ? "この日時で会議を作る" : "この会議で募集を始める")}
       </button>
     </form>
   );
