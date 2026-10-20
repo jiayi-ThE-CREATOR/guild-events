@@ -1,4 +1,4 @@
-import { fullDateTime, timeOnly } from "../format.ts";
+import { fullDateTime, mapsUrl, timeOnly } from "../format.ts";
 import { durationLabel } from "../meetings.ts";
 import { meetingRanges, rangeLabel } from "../ranges.ts";
 import { labelOf } from "../guests.ts";
@@ -10,6 +10,11 @@ import type { EventRecord } from "../types";
  * DISCORD_WEBHOOK_URL が無ければ何もしない。失敗しても決定そのものは止めない。
  * メンションは募集開始の @everyone だけ。ほかの通知は allowed_mentions を空にして一切飛ばさない。
  */
+
+/** 住所は Google マップへのリンク（Webhook のメッセージはリンク文字を使える） */
+function addressLine(address: string): string {
+  return `🗺 [${address}](<${mapsUrl(address)}>)`;
+}
 
 function reasonOf(m: Meeting, name: string): string {
   if (m.excluded.includes(name)) return "予定未登録";
@@ -35,6 +40,7 @@ export function meetingMessage(
       `📅 **${m.title}** の日程が決まりました`,
       `🗓 ${fullDateTime(m.confirmed_start)}〜${timeOnly(end)}`,
       m.location ? `📍 ${m.location}` : null,
+      m.address ? addressLine(m.address) : null,
       m.meet_url ? `🎥 Google Meet：${m.meet_url}` : null,
       `✅ 参加できる（${attendees.length}人）：${attendees.map(name).join("、") || "なし"}`,
       absent.length > 0
@@ -72,6 +78,7 @@ export function openingMessage(
     `⏱ 長さ：${durationLabel(m.duration_min)}`,
     `🗓 候補：${meetingRanges(m).map(rangeLabel).join(" / ")}`,
     m.location ? `📍 ${m.location}` : null,
+    m.address ? addressLine(m.address) : null,
     m.meet_url ? `🎥 Google Meet：${m.meet_url}` : null,
     `⏰ 結果発表：${fullDateTime(m.deadline)}`,
     `👥 参加者（${m.participants.length}人）：${m.participants.map(name).join("、")}`,
@@ -212,6 +219,7 @@ export function eventCreatedMessage(e: EventRecord, url: string): string {
     `@everyone 📣 新しいイベント **${e.title}**`,
     `🗓 ${fullDateTime(e.event_date)}〜`,
     e.location ? `📍 ${e.location}` : null,
+    e.address ? addressLine(e.address) : null,
     `👥 ${e.capacity === null ? "定員なし" : `定員 ${e.capacity}人`}`,
     "参加する人は、イベントページで「参加する」を押してください",
     `🔗 ${url}`,

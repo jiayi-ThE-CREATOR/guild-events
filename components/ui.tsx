@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { mapsUrl } from "@/lib/format";
 
 /**
  * ミーティング系の画面で共通に使う見た目の部品。
@@ -236,6 +237,22 @@ export function MeetLink({ url }: { url: string }) {
       <span aria-hidden>🎥</span>
       <span className="whitespace-nowrap">Google Meet で参加</span>
       <span className="text-ink-soft font-normal whitespace-nowrap">{url.replace(/^https:\/\/meet\.google\.com\//, "")}</span>
+    </a>
+  );
+}
+
+/** 住所を Google マップへのリンクで出す（見出しの下に置く） */
+export function MapLink({ address }: { address: string }) {
+  return (
+    <a
+      href={mapsUrl(address)}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-navy mt-1.5 mr-3 inline-flex flex-wrap items-center gap-x-1.5 text-[13px] font-semibold underline-offset-2 hover:underline"
+    >
+      <span aria-hidden>📍</span>
+      <span>{address}</span>
+      <span className="text-ink-soft font-normal whitespace-nowrap">Google マップで開く</span>
     </a>
   );
 }

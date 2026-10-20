@@ -115,6 +115,7 @@ Secret key を `NEXT_PUBLIC_` 付きの変数に入れると、サイトを開�
 | `004_calendar_sources.sql` | 日程調整のカレンダー連携の保存先 | Table Editor に `calendar_sources` があるか |
 | `014_event_files.sql` | イベントの資料（013 を先に流す） | Table Editor に `event_files` があるか |
 | `015_event_scheduling.sql` | イベントの日程調整（**このコードより先に流す**。`events.date_status` を読むので、無いと一覧が開けない） | `events` に `date_status` 列があるか |
+| `016_address.sql` | イベント・会議の「住所」（**このコードより先に流す**。`events.address` を読むので、無いと一覧が開けない） | `events` に `address` 列があるか |
 
 どれも何度流しても安全に作ってあるので、迷ったら全部流してよい。
 
@@ -258,6 +259,9 @@ tests/                        npm test（node --test）
   一覧は `event_files`、本体は会議と同じバケット `meeting-files` の `events/<イベント id>/` の下（`lib/server/files.ts` の `EVENT_FILES`）。
   `014_event_files.sql` を流すまでは資料の欄が出ない。イベントを削除すると一覧の行は消えるが、Storage の本体は残る
 - **カレンダー** — 参加している人に「カレンダーに追加 ▾」。終了時刻の列が無いので開始から 2 時間で入る
+- **住所** — イベント・会議の作成で「住所」（任意）を入れると、ページ（会議はゲストのページも）に Google マップへの
+  リンクが出る（`lib/format.ts` の `mapsUrl`。検索の URL なので API キー不要）。「場所」は表示用の名前（教室など）、
+  「住所」は地図で探せる住所と分けている。カレンダーの場所と Discord の通知にも入る（016）
 
 ### イベントの日程調整（みんなの予定から決める）
 
@@ -355,7 +359,7 @@ secret key で接続したときだけ触れる。
 
 ### 有効にする手順（初回だけ）
 
-1. Supabase の SQL Editor で `supabase/migrations/` の 004〜015 を番号順に実行
+1. Supabase の SQL Editor で `supabase/migrations/` の 004〜016 を番号順に実行
 2. Google Cloud Console でプロジェクトを作り、Google Calendar API を有効にする
 3. OAuth 同意画面：User Type は「外部」、scope は `calendar.freebusy` と
    `calendar.calendarlist.readonly`（どちらも非機密なので審査は不要）。

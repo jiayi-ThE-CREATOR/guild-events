@@ -7,6 +7,8 @@ export type EventRecord = {
   title: string;
   description: string | null;
   location: string | null;
+  /** 地図で探せる住所（016）。画面では Google マップへのリンク。無ければ null */
+  address?: string | null;
   /** ISO8601 */
   event_date: string;
   capacity: number | null;
@@ -63,6 +65,7 @@ export type NewEvent = {
   title: string;
   description: string | null;
   location: string | null;
+  address: string | null;
   /** ISO8601 */
   event_date: string;
   capacity: number | null;

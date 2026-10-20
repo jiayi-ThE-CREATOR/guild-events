@@ -14,6 +14,8 @@ export type Meeting = {
   title: string;
   description: string | null;
   location: string | null;
+  /** 地図で探せる住所（016）。無ければ null */
+  address?: string | null;
   organizer: string;
   participants: string[];
   duration_min: number;

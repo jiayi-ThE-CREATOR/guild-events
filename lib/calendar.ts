@@ -153,3 +153,9 @@ export function withMeet(item: CalendarItem, meetUrl: string | null | undefined)
     description: [`Google Meet：${meetUrl}`, item.description].filter(Boolean).join("\n\n"),
   };
 }
+
+/** 住所があれば、カレンダーの場所に足す（カレンダー側が地図で開けるように） */
+export function withAddress(item: CalendarItem, address: string | null | undefined): CalendarItem {
+  if (!address) return item;
+  return { ...item, location: [item.location, address].filter(Boolean).join(" ") };
+}

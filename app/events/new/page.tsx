@@ -34,6 +34,7 @@ export default function NewEventPage() {
                 title: values.title,
                 description: values.description,
                 location: values.location,
+                address: values.address,
                 ...schedule,
                 event: { capacity: values.capacity },
               }),

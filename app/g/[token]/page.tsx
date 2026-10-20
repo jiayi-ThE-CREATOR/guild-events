@@ -5,8 +5,8 @@ import { useCallback, useEffect, useState } from "react";
 import CalendarConnections from "@/components/CalendarConnections";
 import MeetingFiles, { type FileItem } from "@/components/MeetingFiles";
 import MeetingEntry from "@/components/MeetingEntry";
-import { btn, Dot, DOT, Dropdown, ErrorText, MeetLink, Note, SectionTitle, Tag } from "@/components/ui";
-import { calendarMenu, withMeet, type CalendarItem } from "@/lib/calendar";
+import { btn, Dot, DOT, Dropdown, ErrorText, MapLink, MeetLink, Note, SectionTitle, Tag } from "@/components/ui";
+import { calendarMenu, withAddress, withMeet, type CalendarItem } from "@/lib/calendar";
 import { fullDateTime, timeOnly } from "@/lib/format";
 import { durationLabel } from "@/lib/meetings";
 import { rangeLabel, type CandidateRange } from "@/lib/ranges";
@@ -24,6 +24,7 @@ type GuestView = {
     title: string;
     description: string | null;
     location: string | null;
+    address: string | null;
     duration_min: number;
     ranges: CandidateRange[];
     deadline: string;
@@ -134,6 +135,7 @@ function GuestView() {
             </>
           )}
         </p>
+        {m.address && <MapLink address={m.address} />}
         {m.meet_url && <MeetLink url={m.meet_url} />}
         {m.description && <p className="text-ink mt-1.5 text-sm leading-relaxed whitespace-pre-wrap">{m.description}</p>}
       </header>
@@ -152,7 +154,7 @@ function GuestView() {
             {view.result.youAttend && (
               <Dropdown
                 label="カレンダーに追加"
-                items={calendarMenu(withMeet(calendarItem, m.meet_url))}
+                items={calendarMenu(withMeet(withAddress(calendarItem, m.address), m.meet_url))}
               />
             )}
           </div>
@@ -228,7 +230,7 @@ function GuestView() {
               durationMin={m.duration_min}
               deadline={m.deadline}
               calendarBase={withMeet(
-                { id: token, title: m.title, description: m.description, location: m.location, event_date: "", duration_min: m.duration_min },
+                withAddress({ id: token, title: m.title, description: m.description, location: m.location, event_date: "", duration_min: m.duration_min }, m.address),
                 m.meet_url,
               )}
             />}
