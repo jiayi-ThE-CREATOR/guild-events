@@ -41,3 +41,11 @@ test("終了の判定は日本時間の日付で、当日中は終わってい�
   const nextDay = Date.parse("2026-11-01T15:30:00Z");
   assert.equal(isPastJst(ev.event_date, nextDay), true);
 });
+
+test("住所があれば Google マップへのリンクを 1 行足す（プレビューは出さない）", async () => {
+  const { mapsUrl } = await import("../lib/format.ts");
+  assert.equal(mapsUrl("大阪府豊中市待兼山町1-1"), "https://www.google.com/maps/search/?api=1&query=%E5%A4%A7%E9%98%AA%E5%BA%9C%E8%B1%8A%E4%B8%AD%E5%B8%82%E5%BE%85%E5%85%BC%E5%B1%B1%E7%94%BA1-1");
+  const text = eventCreatedMessage({ ...ev, address: "大阪府豊中市待兼山町1-1" }, "u");
+  assert.ok(text.includes(`🗺 [大阪府豊中市待兼山町1-1](<${mapsUrl("大阪府豊中市待兼山町1-1")}>)`));
+  assert.ok(!eventCreatedMessage(ev, "u").includes("🗺"));
+});

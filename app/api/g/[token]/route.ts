@@ -30,6 +30,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       title: meeting.title,
       description: meeting.description,
       location: meeting.location,
+      address: meeting.address ?? null,
       duration_min: meeting.duration_min,
       ranges: meetingRanges(meeting),
       deadline: meeting.deadline,

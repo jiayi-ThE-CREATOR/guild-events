@@ -51,7 +51,7 @@ export async function listEvents(): Promise<EventWithCount[]> {
   if (sb) {
     const { data: events, error } = await sb
       .from("events")
-      .select("id, title, description, location, event_date, capacity, date_status, schedule_deadline")
+      .select("id, title, description, location, address, event_date, capacity, date_status, schedule_deadline")
       .order("event_date", { ascending: true });
     if (error) throw new Error(error.message);
 
@@ -159,7 +159,7 @@ export async function getEvent(id: string): Promise<EventWithCount | null> {
   if (sb) {
     const { data, error } = await sb
       .from("events")
-      .select("id, title, description, location, event_date, capacity, date_status, schedule_deadline")
+      .select("id, title, description, location, address, event_date, capacity, date_status, schedule_deadline")
       .eq("id", id)
       .maybeSingle();
     if (error) throw new Error(error.message);
@@ -307,7 +307,7 @@ export async function listApplicationsByName(
     const { data, error } = await sb
       .from("applications")
       .select(
-        "id, event_id, name, university, status, discord, note, created_at, events(id, title, description, location, event_date, capacity, date_status, schedule_deadline)",
+        "id, event_id, name, university, status, discord, note, created_at, events(id, title, description, location, address, event_date, capacity, date_status, schedule_deadline)",
       )
       .eq("name", trimmed)
       .in("status", ACTIVE);

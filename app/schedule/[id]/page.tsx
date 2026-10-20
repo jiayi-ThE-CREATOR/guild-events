@@ -8,8 +8,8 @@ import MeetingFiles, { type FileItem } from "@/components/MeetingFiles";
 import MembersBusyGrid from "@/components/MembersBusyGrid";
 import PageHeader from "@/components/PageHeader";
 import RangesInput, { fromCandidateRanges, rangesReady, toCandidateRanges, type RangeRow } from "@/components/RangesInput";
-import { btn, Dot, DOT, Dropdown, ErrorText, field, MeetLink, Menu, Note, Panel, SectionTitle, Segmented, Tag } from "@/components/ui";
-import { calendarMenu, withMeet } from "@/lib/calendar";
+import { btn, Dot, DOT, Dropdown, ErrorText, field, MapLink, MeetLink, Menu, Note, Panel, SectionTitle, Segmented, Tag } from "@/components/ui";
+import { calendarMenu, withAddress, withMeet } from "@/lib/calendar";
 import { fullDateTime, timeOnly } from "@/lib/format";
 import { labelOf } from "@/lib/guests";
 import { durationLabel, hoursLabel, MEETING_DEADLINE_HOURS, type ParticipantState } from "@/lib/meetings";
@@ -32,6 +32,7 @@ type Meeting = {
   description: string | null;
   meet_url: string | null;
   location: string | null;
+  address?: string | null;
   organizer: string;
   participants: string[];
   duration_min: number;
@@ -186,6 +187,7 @@ export default function MeetingPage() {
                   イベントのページへ（決まると、空いている人は自動で参加になります）
                 </Link>
               )}
+              {m.address && <MapLink address={m.address} />}
               {m.meet_url && <MeetLink url={m.meet_url} />}
               {m.description && <p className="text-ink mt-1.5 text-sm leading-relaxed whitespace-pre-wrap">{m.description}</p>}
             </div>
@@ -453,7 +455,7 @@ function TentativeAdd({ meeting: m, start }: { meeting: Meeting; start: number }
       buttonClass={`${btn.text} shrink-0 text-[13px]`}
       items={calendarMenu(
         withMeet(
-          {
+          withAddress({
             id: `${m.id}-${start}`,
             title: m.title,
             description: m.description,
@@ -461,7 +463,7 @@ function TentativeAdd({ meeting: m, start }: { meeting: Meeting; start: number }
             event_date: iso(start),
             duration_min: m.duration_min,
             tentative: true,
-          },
+          }, m.address),
           m.meet_url,
         ),
       )}
@@ -605,7 +607,7 @@ function ConfirmedBlock({
           <div className="flex flex-wrap gap-2">
             <Dropdown
               label="カレンダーに追加"
-              items={calendarMenu(withMeet(calendarItem, m.meet_url))}
+              items={calendarMenu(withMeet(withAddress(calendarItem, m.address), m.meet_url))}
             />
             {rsvpOpen && member && (
               attending ? (

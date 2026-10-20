@@ -41,6 +41,8 @@ type Body = {
   title?: string;
   description?: string;
   location?: string;
+  /** 地図で探せる住所（任意） */
+  address?: string;
   organizer?: string;
   participants?: string[];
   durationMin?: number;
@@ -143,6 +145,7 @@ export async function POST(req: NextRequest) {
         title: b.title!.trim(),
         description: b.description?.trim() || null,
         location: b.location?.trim() || null,
+        address: b.address?.trim() || null,
         capacity: b.event.capacity ?? null,
         event_date: new Date(rangeIntervals(b.ranges!)[0].start).toISOString(),
         date_status: "scheduling",
@@ -160,6 +163,7 @@ export async function POST(req: NextRequest) {
       title: b.title!.trim(),
       description: b.description?.trim() || null,
       location: b.location?.trim() || null,
+      address: b.address?.trim() || null,
       organizer: b.organizer,
       participants: [...new Set(b.participants)],
       duration_min: b.durationMin,

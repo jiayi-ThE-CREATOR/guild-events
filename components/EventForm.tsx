@@ -57,6 +57,7 @@ export default function EventForm({
   const [description, setDescription] = useState(initial?.description ?? "");
   const [venue, setVenue] = useState<Venue | "">(parsed.venue as Venue | "");
   const [detail, setDetail] = useState(parsed.detail);
+  const [address, setAddress] = useState(initial?.address ?? "");
   const [date, setDate] = useState(
     initial ? toDateTimeLocal(initial.event_date) : "",
   );
@@ -114,6 +115,7 @@ export default function EventForm({
           title: title.trim(),
           description: description.trim() || null,
           location: composeLocation(venue, detail),
+          address: address.trim() || null,
           // datetime-local はローカル時刻。Date に通して ISO（UTC）に直す。
           // 日程調整中は仮の日時をそのまま残す（日程調整で作るときはサーバーが入れる）
           event_date: dateLocked || scheduling ? (initial?.event_date ?? new Date().toISOString()) : new Date(date).toISOString(),
@@ -275,6 +277,20 @@ export default function EventForm({
             表示される場所：{composeLocation(venue, detail)}
           </Note>
         )}
+      </Field>
+
+      <Field label="住所" hint="任意" htmlFor="address">
+        <input
+          id="address"
+          type="text"
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+          placeholder="大阪府豊中市待兼山町1-1 など"
+          className={field}
+        />
+        <Note className="mt-1.5">
+          入れると、イベントのページに Google マップへのリンクが出ます。
+        </Note>
       </Field>
 
       <Field label="定員" hint="任意" htmlFor="capacity">

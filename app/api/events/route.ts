@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
       title: title.slice(0, 200),
       description: b.description?.trim() || null,
       location: b.location?.trim() || null,
+      address: b.address?.trim() || null,
       event_date: new Date(b.event_date).toISOString(),
       capacity,
     })

@@ -64,6 +64,7 @@ function MeetingForm({ fixed }: { fixed: boolean }) {
   const fixedStartMs = Date.parse(`${fixedDate}T00:00:00+09:00`) + fixedStart * 60 * 1000;
   const fixedEndMs = Date.parse(`${fixedDate}T00:00:00+09:00`) + fixedEnd * 60 * 1000;
   const [location, setLocation] = useState("");
+  const [address, setAddress] = useState("");
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -132,6 +133,7 @@ function MeetingForm({ fixed }: { fixed: boolean }) {
             ? { fixed: { start: new Date(fixedStartMs).toISOString(), end: new Date(fixedEndMs).toISOString() } }
             : { durationMin, deadlineHours, ranges: toCandidateRanges(ranges) }),
           location,
+          address,
           description,
           guests,
           meet: meet && meetReady,
@@ -324,6 +326,12 @@ function MeetingForm({ fixed }: { fixed: boolean }) {
       <div>
         <label htmlFor="location" className={label}>場所（任意）</label>
         <input id="location" type="text" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Discord / 豊中キャンパス など" className={field} />
+      </div>
+
+      <div>
+        <label htmlFor="address" className={label}>住所（任意）</label>
+        <input id="address" type="text" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="大阪府豊中市待兼山町1-1 など" className={field} />
+        <Note className="mt-1.5">入れると、会議のページに Google マップへのリンクが出ます。</Note>
       </div>
 
       <div>

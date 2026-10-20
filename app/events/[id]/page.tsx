@@ -5,8 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import MeetingFiles, { type FileItem } from "@/components/MeetingFiles";
 import PageHeader from "@/components/PageHeader";
-import { btn, Dropdown, ErrorText, Menu, Note, SectionTitle, Tag } from "@/components/ui";
-import { calendarMenu } from "@/lib/calendar";
+import { btn, Dropdown, ErrorText, MapLink, Menu, Note, SectionTitle, Tag } from "@/components/ui";
+import { calendarMenu, withAddress } from "@/lib/calendar";
 import {
   deleteEvent,
   getEvent,
@@ -196,6 +196,7 @@ export default function EventDetailPage() {
                 {` · ${event.location ?? "場所未定"} · `}
                 {event.capacity === null ? "定員なし" : `定員 ${event.capacity}人（残り ${remaining}）`}
               </p>
+              {event.address && <MapLink address={event.address} />}
               {event.description && (
                 <p className="text-ink mt-1.5 text-sm leading-relaxed whitespace-pre-wrap">{event.description}</p>
               )}
@@ -347,7 +348,7 @@ function YouBar({
           {me && (
             <Dropdown
               label="カレンダーに追加"
-              items={calendarMenu(event)}
+              items={calendarMenu(withAddress(event, event.address))}
             />
           )}
           {me?.status === "applied" && (
