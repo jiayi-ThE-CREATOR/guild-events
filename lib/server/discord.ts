@@ -3,6 +3,7 @@ import { durationLabel } from "../meetings.ts";
 import { meetingRanges, rangeLabel } from "../ranges.ts";
 import { labelOf } from "../guests.ts";
 import type { Meeting } from "./meetings";
+import type { EventRecord } from "../types";
 
 /**
  * 会議の募集開始と決定を Discord のチャンネルに流す（Webhook）。
@@ -201,4 +202,52 @@ export async function notifyOpened(
   labels: Record<string, string> = {},
 ) {
   await post(openingMessage(m, unconnected, `${origin}/schedule/${m.id}`, labels), true);
+}
+
+/* ───────── イベント ───────── */
+
+/** イベントを作ったとき（先頭で @everyone） */
+export function eventCreatedMessage(e: EventRecord, url: string): string {
+  return [
+    `@everyone 📣 新しいイベント **${e.title}**`,
+    `🗓 ${fullDateTime(e.event_date)}〜`,
+    e.location ? `📍 ${e.location}` : null,
+    `👥 ${e.capacity === null ? "定員なし" : `定員 ${e.capacity}人`}`,
+    "参加する人は、イベントページで「参加する」を押してください",
+    `🔗 ${url}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** イベントに参加する／やめたとき */
+export function eventRsvpMessage(
+  e: EventRecord,
+  member: string,
+  attending: boolean,
+  count: number,
+  url: string,
+): string {
+  const when = `（${fullDateTime(e.event_date)}〜）`;
+  return [
+    attending
+      ? `🙋 **${member}** さんが参加します｜${e.title}${when}`
+      : `🙅 **${member}** さんが参加をやめました｜${e.title}${when}`,
+    e.capacity === null ? `参加 ${count}人` : `参加 ${count}/${e.capacity}人`,
+    `🔗 ${url}`,
+  ].join("\n");
+}
+
+export async function notifyEventCreated(e: EventRecord, origin: string) {
+  await post(eventCreatedMessage(e, `${origin}/events/${e.id}`), true);
+}
+
+export async function notifyEventRsvp(
+  e: EventRecord,
+  member: string,
+  attending: boolean,
+  count: number,
+  origin: string,
+) {
+  await post(eventRsvpMessage(e, member, attending, count, `${origin}/events/${e.id}`));
 }

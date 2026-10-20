@@ -10,6 +10,7 @@ import type {
   EventWithCount,
   NewApplication,
   NewEvent,
+  University,
 } from "./types";
 
 /**
@@ -86,17 +87,20 @@ export function isPast(event: { event_date: string }): boolean {
   return new Date(event.event_date) < startOfToday;
 }
 
-/** イベントを新規作成する（認証が無いので誰でも作れる） */
+/**
+ * イベントを新規作成する（認証が無いので誰でも作れる）。
+ * Discord に流すため、本番 DB のときはサーバー（app/api/events）を通す
+ */
 export async function createEvent(input: NewEvent): Promise<EventRecord> {
-  const sb = getSupabase();
-  if (sb) {
-    const { data, error } = await sb
-      .from("events")
-      .insert(input)
-      .select()
-      .single();
-    if (error) throw new Error(error.message);
-    return data as EventRecord;
+  if (getSupabase()) {
+    const res = await fetch("/api/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error);
+    return json.event as EventRecord;
   }
   return mockStore.insertEvent(input);
 }
@@ -254,6 +258,41 @@ export async function cancelApplication(id: string): Promise<void> {
     return;
   }
   mockStore.cancel(id);
+}
+
+/**
+ * イベントに参加する／参加をやめる（メンバーのワンタップ）。
+ * 本番 DB のときは Discord に流すためサーバー（app/api/events/[id]/rsvp）を通す。
+ * モックのときは従来の申請・キャンセルで代わりにする
+ */
+export async function setAttendance(
+  eventId: string,
+  member: string,
+  university: University | null,
+  attending: boolean,
+): Promise<void> {
+  if (getSupabase()) {
+    const res = await fetch(`/api/events/${eventId}/rsvp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ member, attending, university }),
+    });
+    if (!res.ok) throw new Error((await res.json()).error);
+    return;
+  }
+  const mine = activeApplications().find(
+    (a) => a.event_id === eventId && a.name === member,
+  );
+  if (attending && !mine) {
+    await createApplication({
+      event_id: eventId,
+      name: member,
+      university: university ?? "その他",
+      discord: null,
+      note: null,
+    });
+  }
+  if (!attending && mine?.status === "applied") mockStore.cancel(mine.id);
 }
 
 /** 名前で自分の有効な申請を引く（認証なしのため「名前＋大学」が本人識別子） */

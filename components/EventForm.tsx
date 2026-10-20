@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { btn, ErrorText, field, Note } from "@/components/ui";
 import { composeLocation, parseLocation, toDateTimeLocal } from "@/lib/format";
 import {
   VENUES,
@@ -9,7 +10,7 @@ import {
   type Venue,
 } from "@/lib/types";
 
-/** 作成と編集で共用するイベントのフォーム */
+/** 作成と編集で共用するイベントのフォーム（見た目は会議の作成フォームに合わせる） */
 export default function EventForm({
   initial,
   submitLabel,
@@ -62,7 +63,7 @@ export default function EventForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="border-line space-y-5 px-4 pt-4 md:rounded-2xl md:border md:bg-white md:p-8"
+      className="border-line space-y-4 px-4 pt-3 pb-8 md:rounded-xl md:border md:bg-white md:p-6"
     >
       <Field label="イベント名" htmlFor="title" required>
         <input
@@ -72,7 +73,7 @@ export default function EventForm({
           onChange={(e) => setTitle(e.target.value)}
           required
           placeholder="GUILD勉強会 #2"
-          className="border-line focus:border-navy text-ink w-full rounded-xl border px-3.5 py-3 text-[15px] outline-none"
+          className={field}
         />
       </Field>
 
@@ -83,7 +84,7 @@ export default function EventForm({
           value={date}
           onChange={(e) => setDate(e.target.value)}
           required
-          className="border-line focus:border-navy text-ink w-full rounded-xl border px-3.5 py-3 text-[15px] outline-none"
+          className={field}
         />
       </Field>
 
@@ -95,10 +96,10 @@ export default function EventForm({
               type="button"
               onClick={() => setVenue(v)}
               aria-pressed={venue === v}
-              className={`rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+              className={`rounded-lg border py-2 text-sm font-semibold ${
                 venue === v
-                  ? "bg-navy text-white"
-                  : "border-line text-ink-soft border bg-white"
+                  ? "border-navy bg-navy-soft text-navy"
+                  : "border-line text-ink-soft bg-white"
               }`}
             >
               {v}
@@ -116,12 +117,12 @@ export default function EventForm({
               : "豊中キャンパス B203 など（任意）"
           }
           aria-label="場所の詳細"
-          className="border-line focus:border-navy text-ink mt-2 w-full rounded-xl border px-3.5 py-3 text-[15px] outline-none"
+          className={`${field} mt-2`}
         />
         {venue !== "" && (
-          <p className="text-ink-soft mt-1.5 text-[11px]">
+          <Note className="mt-1.5">
             表示される場所：{composeLocation(venue, detail)}
-          </p>
+          </Note>
         )}
       </Field>
 
@@ -134,11 +135,11 @@ export default function EventForm({
           value={capacity}
           onChange={(e) => setCapacity(e.target.value)}
           placeholder="30"
-          className="border-line focus:border-navy text-ink w-full rounded-xl border px-3.5 py-3 text-[15px] outline-none"
+          className={field}
         />
-        <p className="text-ink-soft mt-1.5 text-[11px]">
-          空欄にすると定員なし。埋まると自動で申請を締め切ります。
-        </p>
+        <Note className="mt-1.5">
+          空欄にすると定員なし。埋まると「参加する」が押せなくなります。
+        </Note>
       </Field>
 
       <Field label="説明" hint="任意" htmlFor="description">
@@ -148,20 +149,16 @@ export default function EventForm({
           onChange={(e) => setDescription(e.target.value)}
           rows={4}
           placeholder="当日やること、持ち物など"
-          className="border-line focus:border-navy text-ink w-full resize-none rounded-xl border px-3.5 py-3 text-[15px] outline-none"
+          className={`${field} resize-none`}
         />
       </Field>
 
-      {error && (
-        <p className="text-amber bg-amber-soft rounded-xl p-3 text-xs">
-          {error}
-        </p>
-      )}
+      {error && <ErrorText>{error}</ErrorText>}
 
       <button
         type="submit"
         disabled={!ready || submitting}
-        className="bg-grass w-full rounded-xl py-3.5 text-[15px] font-bold text-white shadow-[0_6px_18px_rgba(0,179,126,0.35)] disabled:opacity-40 disabled:shadow-none"
+        className={`${btn.primary} w-full py-3`}
       >
         {submitting ? busyLabel : submitLabel}
       </button>
@@ -188,7 +185,7 @@ function Field({
       {hint && (
         <span className="text-ink-soft ml-1 font-normal">（{hint}）</span>
       )}
-      {required && <span className="text-amber ml-1">*</span>}
+      {required && <span className="text-amber ml-0.5">*</span>}
     </>
   );
 
@@ -197,12 +194,12 @@ function Field({
       {htmlFor ? (
         <label
           htmlFor={htmlFor}
-          className="text-ink mb-1.5 block text-xs font-semibold"
+          className="text-ink mb-1 block text-[13px] font-semibold"
         >
           {text}
         </label>
       ) : (
-        <p className="text-ink mb-1.5 text-xs font-semibold">{text}</p>
+        <p className="text-ink mb-1 text-[13px] font-semibold">{text}</p>
       )}
       {children}
     </div>

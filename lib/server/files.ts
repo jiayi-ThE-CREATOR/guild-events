@@ -7,7 +7,19 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * 1. サーバーが置き場所と「一度だけ使える上げ先 URL」を発行する（uploadTarget）
  * 2. ブラウザがその URL にファイル本体を PUT する
  * 3. サーバーが本当に置かれたか確かめてから一覧（meeting_files）に載せる（registerFiles）
+ *
+ * イベントの資料も同じ仕組み。一覧は event_files、置き場所は同じバケットの events/<id>/ の下。
+ * 各関数の最後の引数（FileOwner）で切り替える。省略すると会議。
  */
+
+export type FileOwner = { table: string; column: string; prefix: string };
+export const MEETING_FILES: FileOwner = { table: "meeting_files", column: "meeting_id", prefix: "" };
+export const EVENT_FILES: FileOwner = { table: "event_files", column: "event_id", prefix: "events/" };
+
+/** その会議・イベントの資料の置き場所（この下に発行したものだけ受け付ける） */
+export function filesDir(id: string, owner: FileOwner = MEETING_FILES): string {
+  return `${owner.prefix}${id}/`;
+}
 
 export const FILES_BUCKET = "meeting-files";
 export const MAX_FILE_BYTES = 50 * 1024 * 1024;
@@ -22,11 +34,15 @@ export type MeetingFile = {
   created_at: string;
 };
 
-export async function filesOf(admin: SupabaseClient, meetingId: string): Promise<MeetingFile[]> {
+export async function filesOf(
+  admin: SupabaseClient,
+  meetingId: string,
+  owner: FileOwner = MEETING_FILES,
+): Promise<MeetingFile[]> {
   const { data, error } = await admin
-    .from("meeting_files")
+    .from(owner.table)
     .select("id, name, size, content_type, uploaded_by, created_at")
-    .eq("meeting_id", meetingId)
+    .eq(owner.column, meetingId)
     .order("created_at");
   if (error) throw new Error(error.message);
   return (data ?? []) as MeetingFile[];
@@ -42,10 +58,11 @@ export async function uploadTarget(
   admin: SupabaseClient,
   meetingId: string,
   name: string,
+  owner: FileOwner = MEETING_FILES,
 ): Promise<{ path: string; url: string }> {
   // Storage のキーは ASCII が無難なので、元の名前は DB にだけ持ち、置き場所はランダム＋拡張子にする
   const ext = (safeName(name).match(/\.[A-Za-z0-9]{1,10}$/)?.[0] ?? "").toLowerCase();
-  const path = `${meetingId}/${crypto.randomUUID()}${ext}`;
+  const path = `${filesDir(meetingId, owner)}${crypto.randomUUID()}${ext}`;
   const { data, error } = await admin.storage.from(FILES_BUCKET).createSignedUploadUrl(path);
   if (error) throw new Error(error.message);
   return { path, url: data.signedUrl };
@@ -68,9 +85,13 @@ export async function downloadUrl(admin: SupabaseClient, path: string, name: str
   return data.signedUrl;
 }
 
-export async function removeFile(admin: SupabaseClient, file: { id: string; path: string }): Promise<void> {
+export async function removeFile(
+  admin: SupabaseClient,
+  file: { id: string; path: string },
+  owner: FileOwner = MEETING_FILES,
+): Promise<void> {
   const { error } = await admin.storage.from(FILES_BUCKET).remove([file.path]);
   if (error) throw new Error(error.message);
-  const { error: dbError } = await admin.from("meeting_files").delete().eq("id", file.id);
+  const { error: dbError } = await admin.from(owner.table).delete().eq("id", file.id);
   if (dbError) throw new Error(dbError.message);
 }

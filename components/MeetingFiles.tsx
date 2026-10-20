@@ -4,10 +4,10 @@ import { useRef, useState } from "react";
 import { btn, ErrorText, Note, SectionTitle } from "@/components/ui";
 import { fullDateTime } from "@/lib/format";
 import { sizeLabel } from "@/lib/notify-email";
-import { uploadMeetingFiles } from "@/lib/upload";
+import { uploadFiles } from "@/lib/upload";
 
 /**
- * 会議の「資料」。一覧・ダウンロードは誰でも。追加・削除はメンバーの会議ページだけ
+ * 会議・イベントの「資料」。一覧・ダウンロードは誰でも。追加・削除はメンバーの会議ページ・イベントページだけ
  * （uploader に名前が入っているとき）。追加すると参加者にメールが届く。
  */
 
@@ -16,31 +16,31 @@ export type FileItem = { id: string; name: string; size: number; uploaded_by?: s
 export default function MeetingFiles({
   files,
   downloadBase,
-  meetingId,
+  apiBase,
   uploader,
   onChanged,
 }: {
   files: FileItem[];
   /** 例：/api/meetings/<id>/files ・ /api/g/<token>/files */
   downloadBase: string;
-  /** 追加・削除できるときだけ渡す */
-  meetingId?: string;
+  /** 追加・削除できるときだけ渡す。例：/api/meetings/<id> ・ /api/events/<id> */
+  apiBase?: string;
   uploader?: string | null;
   onChanged?: () => Promise<void>;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const editable = !!meetingId && !!onChanged;
+  const editable = !!apiBase && !!onChanged;
 
   async function add(list: FileList | null) {
-    if (!list || list.length === 0 || !meetingId || !onChanged) return;
+    if (!list || list.length === 0 || !apiBase || !onChanged) return;
     if (!uploader) return setError("マイページで名前を選ぶと、資料を追加できます");
     const chosen = [...list];
     setError(null);
     setBusy(`上げています… 0/${chosen.length}`);
     try {
-      await uploadMeetingFiles(meetingId, chosen, uploader, (n) => setBusy(`上げています… ${n}/${chosen.length}`));
+      await uploadFiles(apiBase, chosen, uploader, (n) => setBusy(`上げています… ${n}/${chosen.length}`));
       await onChanged();
     } catch (e) {
       setError((e as Error).message);
@@ -51,10 +51,10 @@ export default function MeetingFiles({
   }
 
   async function remove(f: FileItem) {
-    if (!meetingId || !onChanged || !window.confirm(`「${f.name}」を削除しますか？`)) return;
+    if (!apiBase || !onChanged || !window.confirm(`「${f.name}」を削除しますか？`)) return;
     setError(null);
     setBusy("削除しています…");
-    const res = await fetch(`/api/meetings/${meetingId}/files/${f.id}`, { method: "DELETE" });
+    const res = await fetch(`${apiBase}/files/${f.id}`, { method: "DELETE" });
     if (!res.ok) setError((await res.json()).error);
     await onChanged();
     setBusy(null);

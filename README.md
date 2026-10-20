@@ -12,9 +12,12 @@ Next.js 16（App Router / TypeScript）＋ Tailwind CSS v4 ＋ Supabase。
 |---|------|------|
 | 1 | イベント一覧を見る | `/` |
 | 2 | イベント詳細を見る | `/events/[id]` |
-| 3 | 参加申請する | `/events/[id]/apply` |
-| 4 | 申請をキャンセルする | `/mypage` |
-| 5 | 自分の申込状況を見る | `/mypage` |
+| 3 | 参加する（メンバーのワンタップ） | `/events/[id]` |
+| 4 | 参加をやめる | `/events/[id]`・`/mypage` |
+| 5 | 自分の参加予定を見る | `/mypage` |
+
+2026-10-20 に、イベントの参加の流れと画面を会議（ミーティング）に合わせた（下の「イベントの参加・資料・通知」）。
+申請フォーム（`/events/[id]/apply`）は廃止し、古いリンクはイベントページへ転送する。
 
 大学の区分は **阪大（青）／京大（赤）の2つだけ**。オンラインは区分を設けず、
 イベント作成時の「場所」で表す（`lib/format.ts` の `campusOf` が location から判定し、
@@ -33,9 +36,9 @@ MVP に加えて入れているもの：
   `events` に insert / update / delete のポリシーが必要（`migrations/002`, `003`）
 
 - **これから／もう終わったイベントのタブ** — 開催日が今日より前なら「終了」。
-  終了したイベントは詳細でも申請導線を出さない
-- **参加者一覧** — 詳細画面に申請者を申請順で表示（キャンセル済みは除く）
-- **カレンダー連携** — 申請済みの人に iCal / Outlook / Google の導線を出す。
+  終了したイベントは詳細でも「参加する」を出さない
+- **参加者一覧** — 詳細画面に参加者を申請順で表示（キャンセル済みは除く）
+- **カレンダー連携** — 参加している人に「カレンダーに追加 ▾」（Google / .ics / Outlook）を出す。
   `events` に終了時刻の列が無いので、`lib/calendar.ts` の
   `DEFAULT_DURATION_HOURS`（既定2時間）を足した時刻で登録される
 
@@ -52,7 +55,6 @@ MVP に加えて入れているもの：
 | 全体 | 幅430px の白いカード1枚 | 背景の上に最大1080px の作業領域 |
 | 一覧 | 1列 | 2列（1280px 以上で3列） |
 | 詳細 | 縦積み | 最大768px の読みやすい幅・カバー拡大 |
-| 申請フォーム | 全画面 | 最大576px の白いカード |
 | マイページ | 1列 | 申込中は2列グリッド |
 
 ## 動かす
@@ -111,6 +113,7 @@ Secret key を `NEXT_PUBLIC_` 付きの変数に入れると、サイトを開�
 | `002_allow_event_create.sql` | アプリからイベントを作れるようにする | Authentication → Policies の `events` に `insert_events` があるか |
 | `003_allow_event_edit_delete.sql` | 編集・削除できるようにする | 同じく `update_events` / `delete_events` があるか |
 | `004_calendar_sources.sql` | 日程調整のカレンダー連携の保存先 | Table Editor に `calendar_sources` があるか |
+| `014_event_files.sql` | イベントの資料（013 を先に流す） | Table Editor に `event_files` があるか |
 
 どれも何度流しても安全に作ってあるので、迷ったら全部流してよい。
 
@@ -187,15 +190,18 @@ Secret key を `NEXT_PUBLIC_` 付きの変数に入れると、サイトを開�
 
 ```
 app/
-  page.tsx                    01 イベント一覧（大学フィルタ）
-  events/[id]/page.tsx        02 イベント詳細
-  events/[id]/apply/page.tsx  03 参加申請フォーム
+  page.tsx                    01 イベント一覧（これから／終了・大学フィルタ）
+  events/[id]/page.tsx        02 イベント詳細（参加する／やめる・資料・参加者）
+  events/[id]/apply/page.tsx  廃止。イベント詳細へ転送するだけ
   mypage/page.tsx             04 マイページ（申込中 / 参加済み / カレンダー連携）
   schedule/page.tsx           05 日程調整（会議の一覧）
   schedule/new/page.tsx       06 会議を作成
   schedule/[id]/page.tsx      07 会議の詳細（候補・不参加・決定結果）
   privacy/page.tsx            プライバシーポリシー（Google の本番公開に必要）
   api/calendar/…              カレンダー連携の登録・解除・Google の同意画面の往復
+  api/events                  イベントの作成（Discord に @everyone）
+  api/events/[id]/rsvp        イベントに参加する／やめる（Discord に流す）
+  api/events/[id]/files/…     イベントの資料（一覧・上げ先 URL・登録とメール・ダウンロード・削除）
   api/meetings/…              会議の一覧・作成・詳細・不参加
   api/cron/settle-meetings    締切を過ぎた会議を決める（pg_cron から 5 分おき）
   api/meetings/[id]/entry     この会議の予定（手動）の読み書き
@@ -207,9 +213,10 @@ app/
   api/weekly                  毎週の予定（手動）の読み書き
   api/schedule/members        予定を登録済み（カレンダーか毎週の予定）の人の名前
 components/
-  BottomNav.tsx               下部タブ（イベント / マイページ）
-  EventCard.tsx               一覧カード
-  Badge.tsx                   大学・受付状況のバッジ
+  BottomNav.tsx               下部タブ（イベント / ミーティング / マイページ）
+  ui.tsx                      イベント・ミーティングで共通の見た目の部品（Tag・「⋯」メニュー・Panel・btn など）
+  MeetingFiles.tsx            会議・イベントの「資料」欄
+  Badge.tsx                   マイページのバッジ
   PageHeader.tsx              「← タイトル」ヘッダー
   CalendarConnections.tsx     マイページのカレンダー連携スイッチ
   ScheduleEditor.tsx          30 分のマスを塗る画面（毎週の予定・この会議の予定で共用）
@@ -230,6 +237,25 @@ supabase/schema.sql           テーブル / RLS / サンプルデータ
 supabase/migrations/          既に schema.sql を流した DB に後から当てる差分
 tests/                        npm test（node --test）
 ```
+
+## イベントの参加・資料・通知
+
+会議（ミーティング）と同じ流れ・同じ見た目にしてある。
+
+- **参加** — イベントページの「参加する／参加をやめる」だけ。マイページで選んだ名前が `lib/members.ts` の
+  `MEMBERS` にある人だけ押せる（申請フォーム・Discord名・ひとことは廃止）。記録は今までどおり `applications`
+  （参加＝`applied` の行を足す、やめる＝`cancelled`）なので、定員トリガー・二重申請の禁止・出席済（`attended`）・
+  マイページはそのまま効く。`university` はマイページの登録から入れ、無ければ「その他」。
+  本番 DB では `api/events/[id]/rsvp` を通す（モックでは従来の申請・キャンセルで代わりにする）。
+  メンバー一覧に無い昔の申請者は参加者一覧に残り、マイページからの取り消しもできるが、新しく参加はできない
+- **作成** — 誰でも作れるのは変わらない。本番 DB では `api/events` を通し、作ったら Discord に `@everyone` で流す。
+  編集・削除は今までどおり `ORGANIZERS` だけ（「⋯」メニューの中）
+- **Discord** — 作成（`@everyone`）と、参加する／やめる（メンションなし）を `DISCORD_WEBHOOK_URL` に流す（`lib/server/discord.ts`）
+- **資料** — 会議と同じ部品（`MeetingFiles`）。メンバーなら誰でも追加・削除でき、追加すると上げた人以外の参加者に
+  メールが届く（宛先はマイページの「メール通知」、`lib/server/notify.ts` の `notifyEventFilesAdded`）。
+  一覧は `event_files`、本体は会議と同じバケット `meeting-files` の `events/<イベント id>/` の下（`lib/server/files.ts` の `EVENT_FILES`）。
+  `014_event_files.sql` を流すまでは資料の欄が出ない。イベントを削除すると一覧の行は消えるが、Storage の本体は残る
+- **カレンダー** — 参加している人に「カレンダーに追加 ▾」。終了時刻の列が無いので開始から 2 時間で入る
 
 ## 日程調整（カレンダー連携）
 
@@ -309,7 +335,7 @@ secret key で接続したときだけ触れる。
 
 ### 有効にする手順（初回だけ）
 
-1. Supabase の SQL Editor で `supabase/migrations/` の 004〜011 を番号順に実行
+1. Supabase の SQL Editor で `supabase/migrations/` の 004〜014 を番号順に実行
 2. Google Cloud Console でプロジェクトを作り、Google Calendar API を有効にする
 3. OAuth 同意画面：User Type は「外部」、scope は `calendar.freebusy` と
    `calendar.calendarlist.readonly`（どちらも非機密なので審査は不要）。
@@ -399,7 +425,7 @@ select cron.schedule(
 ## 資料の設計から変えた点
 
 - `applications` に任意カラム `discord` / `note` を 2 本追加した。
-  申請フォームに「Discord名」「ひとこと」があり、入力を保存する先が必要だったため。
+  申請フォームに「Discord名」「ひとこと」があり、入力を保存する先が必要だったため（フォームは 2026-10-20 に廃止。列と過去の値は残す）。
 - イベントの終了時刻とカバー画像は列を持たないので、詳細画面では開始時刻のみを表示し、
   カバーは装飾（ストライプ）にしている。
 - 大学タグ（阪大 / 京大 / オンライン）は列を追加せず `location` の文字列から導出している
