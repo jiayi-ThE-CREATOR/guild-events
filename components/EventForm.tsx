@@ -107,6 +107,8 @@ export default function EventForm({
   const ready =
     title.trim() !== "" &&
     venue !== "" &&
+    // その他は詳細がそのまま場所になるので必須
+    (venue !== "その他" || detail.trim() !== "") &&
     (scheduling
       ? organizer !== "" && participants.size > 0 && rangesReady(ranges)
       : dateLocked || date !== "");
@@ -301,7 +303,7 @@ export default function EventForm({
       )}
 
       <Field label="場所" required>
-        <div role="group" aria-label="場所" className="grid grid-cols-3 gap-2">
+        <div role="group" aria-label="場所" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {VENUES.map((v) => (
             <button
               key={v}
@@ -326,12 +328,14 @@ export default function EventForm({
           placeholder={
             venue === "オンライン"
               ? "Discord など（任意）"
-              : "豊中キャンパス B203 など（任意）"
+              : venue === "その他"
+                ? "梅田のカフェ・〇〇ホール など（必須）"
+                : "豊中キャンパス B203 など（任意）"
           }
           aria-label="場所の詳細"
           className={`${field} mt-2`}
         />
-        {venue !== "" && (
+        {venue !== "" && (venue !== "その他" || detail.trim() !== "") && (
           <Note className="mt-1.5">
             表示される場所：{composeLocation(venue, detail)}
           </Note>

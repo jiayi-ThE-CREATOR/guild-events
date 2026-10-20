@@ -58,7 +58,7 @@ export type NewApplication = {
 };
 
 /** イベント作成時の「場所」の区分。詳細と組み合わせて location 文字列を作る */
-export const VENUES = ["阪大", "京大", "オンライン"] as const;
+export const VENUES = ["阪大", "京大", "オンライン", "その他"] as const;
 export type Venue = (typeof VENUES)[number];
 
 export type NewEvent = {
