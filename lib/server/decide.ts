@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { freeMembers, JST_OFFSET_MS } from "../slots";
 import { availability } from "./availability";
 import { notifyDiscord, notifyRescheduled } from "./discord";
+import { syncEvent } from "./event-sync";
 import { meetingMembers } from "./guests";
 import { declinesOf, type Meeting } from "./meetings";
 
@@ -61,6 +62,7 @@ export async function decideMeeting(
   if (writeError) return { error: writeError.message, status: 500 };
   // 同時に自動で決まった・ほかの人が先に決めたなど
   if (!updated) return { error: "会議の状態が変わりました。ページを開き直してください", status: 409 };
+  await syncEvent(admin, updated as Meeting);
 
   if (closing) {
     await notifyDiscord({ ...(updated as Meeting), participants: keys }, declined, origin, labels);

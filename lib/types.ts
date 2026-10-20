@@ -10,7 +10,19 @@ export type EventRecord = {
   /** ISO8601 */
   event_date: string;
   capacity: number | null;
+  /**
+   * fixed＝日時が決まっている / scheduling＝日程調整中（event_date は仮）/ failed＝そろう時間が無かった（015）。
+   * 015 より前のデータ・モックでは無いので、無ければ fixed とみなす（isScheduled）
+   */
+  date_status?: "fixed" | "scheduling" | "failed";
+  /** 日程調整中の結果発表の時刻 */
+  schedule_deadline?: string | null;
 };
+
+/** 日時が決まっているイベントか（日程調整中・不成立でない） */
+export function isScheduled(e: Pick<EventRecord, "date_status">): boolean {
+  return (e.date_status ?? "fixed") === "fixed";
+}
 
 /** 申請中 / キャンセル済み / 出席済。キャンセルは行を消さず status を変える */
 export type ApplicationStatus = "applied" | "cancelled" | "attended";

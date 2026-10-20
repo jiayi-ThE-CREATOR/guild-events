@@ -6,7 +6,7 @@ import GuildLogo from "@/components/GuildLogo";
 import { btn, ErrorText, Note, Segmented, Tag } from "@/components/ui";
 import { isPast, isSupabaseConfigured, listEvents } from "@/lib/data";
 import { campusOf, fullDateTime, remainingSeats, shortLocation } from "@/lib/format";
-import type { EventWithCount } from "@/lib/types";
+import { isScheduled, type EventWithCount } from "@/lib/types";
 
 /**
  * イベントの一覧。会議の一覧（/schedule）と同じ作り：見出し＋作成ボタン、タブ、1 行ずつのリスト。
@@ -34,10 +34,12 @@ export default function EventListPage() {
       .catch((e: Error) => setError(e.message));
   }, []);
 
-  const inTab = (t: Tab) => (events ?? []).filter((e) => (t === "past" ? isPast(e) : !isPast(e)));
+  // 日程調整中の event_date は仮なので「終了」にはしない
+  const ended = (e: EventWithCount) => isScheduled(e) && isPast(e);
+  const inTab = (t: Tab) => (events ?? []).filter((e) => (t === "past" ? ended(e) : !ended(e)));
 
   const visible = useMemo(() => {
-    const rows = (events ?? []).filter((e) => (tab === "past" ? isPast(e) : !isPast(e)));
+    const rows = (events ?? []).filter((e) => (tab === "past" ? isScheduled(e) && isPast(e) : !(isScheduled(e) && isPast(e))));
     // 終了したものは新しい順、これからのものは近い順
     const sorted = tab === "past" ? [...rows].reverse() : rows;
     return filter === "すべて" ? sorted : sorted.filter((e) => campusOf(e.location) === filter);
@@ -100,7 +102,11 @@ function EventRow({ event: e, past }: { event: EventWithCount; past: boolean }) 
       <Link href={`/events/${e.id}`} className="hover:bg-canvas/60 flex items-center gap-3 px-3.5 py-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            {past ? (
+            {e.date_status === "scheduling" ? (
+              <Tag tone="amber">日程調整中</Tag>
+            ) : e.date_status === "failed" ? (
+              <Tag tone="muted">日程未定</Tag>
+            ) : past ? (
               <Tag tone="muted">終了</Tag>
             ) : remaining === 0 ? (
               <Tag tone="muted">満席</Tag>
@@ -112,7 +118,15 @@ function EventRow({ event: e, past }: { event: EventWithCount; past: boolean }) 
             <h2 className={`truncate text-[15px] font-bold ${past ? "text-ink-soft" : "text-ink"}`}>{e.title}</h2>
           </div>
           <p className="text-ink-soft mt-0.5 truncate text-[13px]">
-            <span className={past ? "" : "text-ink font-semibold"}>{fullDateTime(e.event_date)}〜</span>
+            <span className={past ? "" : "text-ink font-semibold"}>
+              {isScheduled(e)
+                ? `${fullDateTime(e.event_date)}〜`
+                : e.date_status === "failed"
+                  ? "日時未定"
+                  : e.schedule_deadline
+                    ? `${fullDateTime(e.schedule_deadline)} 結果発表`
+                    : "日程調整中"}
+            </span>
             {" · "}
             {(campus === "阪大" || campus === "京大") && (
               <span className={`font-semibold ${campus === "阪大" ? "text-osaka" : "text-kyoto"}`}>{campus} </span>

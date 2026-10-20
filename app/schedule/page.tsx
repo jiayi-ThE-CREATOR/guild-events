@@ -87,6 +87,7 @@ export default function MeetingListPage() {
                     {m.status === "open" && <Tag tone="amber">募集中</Tag>}
                     {m.status === "confirmed" && <Tag tone="grass">決定</Tag>}
                     {m.status === "failed" && <Tag tone="muted">不成立</Tag>}
+                    {m.event_id && <Tag tone="navy">イベント</Tag>}
                     <h2 className="text-ink truncate text-[15px] font-bold">{m.title}</h2>
                   </div>
                   <p className="text-ink-soft mt-0.5 truncate text-[13px]">

@@ -3,7 +3,7 @@ import type { EventRecord } from "../types";
 
 /** イベントまわりのサーバー側の共通処理（参加・資料の API が使う） */
 
-export const EVENT_FIELDS = "id, title, description, location, event_date, capacity";
+export const EVENT_FIELDS = "id, title, description, location, event_date, capacity, date_status, schedule_deadline";
 
 export async function eventOf(admin: SupabaseClient, id: string): Promise<EventRecord | null> {
   const { data, error } = await admin.from("events").select(EVENT_FIELDS).eq("id", id).maybeSingle();

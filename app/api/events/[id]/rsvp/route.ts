@@ -3,7 +3,7 @@ import { isMember } from "@/lib/members";
 import { getAdmin, NOT_CONFIGURED } from "@/lib/server/admin";
 import { notifyEventRsvp } from "@/lib/server/discord";
 import { attendeesOf, eventOf, isPastJst } from "@/lib/server/events";
-import { UNIVERSITIES } from "@/lib/types";
+import { isScheduled, UNIVERSITIES } from "@/lib/types";
 
 /**
  * イベントに参加する／参加をやめる。メンバーなら誰でも使える。終わったイベントは受け付けない。
@@ -31,6 +31,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return Response.json({ error: (e as Error).message }, { status: 500 });
   }
   if (!event) return Response.json({ error: "イベントが見つかりません" }, { status: 404 });
+  if (!isScheduled(event)) {
+    return Response.json({ error: "日時が決まってから参加できます" }, { status: 409 });
+  }
   if (isPastJst(event.event_date)) {
     return Response.json({ error: "このイベントはもう終わっています" }, { status: 409 });
   }

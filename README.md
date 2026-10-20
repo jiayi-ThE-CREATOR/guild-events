@@ -114,6 +114,7 @@ Secret key を `NEXT_PUBLIC_` 付きの変数に入れると、サイトを開�
 | `003_allow_event_edit_delete.sql` | 編集・削除できるようにする | 同じく `update_events` / `delete_events` があるか |
 | `004_calendar_sources.sql` | 日程調整のカレンダー連携の保存先 | Table Editor に `calendar_sources` があるか |
 | `014_event_files.sql` | イベントの資料（013 を先に流す） | Table Editor に `event_files` があるか |
+| `015_event_scheduling.sql` | イベントの日程調整（**このコードより先に流す**。`events.date_status` を読むので、無いと一覧が開けない） | `events` に `date_status` 列があるか |
 
 どれも何度流しても安全に作ってあるので、迷ったら全部流してよい。
 
@@ -202,6 +203,7 @@ app/
   api/events                  イベントの作成（Discord に @everyone）
   api/events/[id]/rsvp        イベントに参加する／やめる（Discord に流す）
   api/events/[id]/files/…     イベントの資料（一覧・上げ先 URL・登録とメール・ダウンロード・削除）
+  api/events/[id]/schedule    日程調整中のイベントの、つないでいる会議の要約
   api/meetings/…              会議の一覧・作成・詳細・不参加
   api/cron/settle-meetings    締切を過ぎた会議を決める（pg_cron から 5 分おき）
   api/meetings/[id]/entry     この会議の予定（手動）の読み書き
@@ -256,6 +258,24 @@ tests/                        npm test（node --test）
   一覧は `event_files`、本体は会議と同じバケット `meeting-files` の `events/<イベント id>/` の下（`lib/server/files.ts` の `EVENT_FILES`）。
   `014_event_files.sql` を流すまでは資料の欄が出ない。イベントを削除すると一覧の行は消えるが、Storage の本体は残る
 - **カレンダー** — 参加している人に「カレンダーに追加 ▾」。終了時刻の列が無いので開始から 2 時間で入る
+
+### イベントの日程調整（みんなの予定から決める）
+
+作成画面で「みんなの予定から決める」を選ぶと、**会議の日程調整をそのまま使って**日時を決める（2026-10-20〜）。
+
+- 作るとき：`api/meetings` に `event: { capacity }` を付けて送る。サーバーが先にイベントを `date_status='scheduling'`
+  （`event_date` は仮に最初の候補の開始、`schedule_deadline` は結果発表）で作り、会議の `event_id` でつなぐ。
+  Discord には会議の「募集開始」（`@everyone`）だけが流れる（イベント作成の通知は出さない）
+- 主催者・予定を見る人・長さ・候補・結果発表は会議と同じ。決め方も同じ（全員 → 1 人欠け → 不成立）。外部ゲスト・決まった日時・Meet は使わない
+- 予定の入力・不参加・延長・手で決める／変えるは**会議のページ**で行う。イベントのページには要約と
+  「日程調整ページで予定を入れる」だけを出す（`api/events/[id]/schedule`。結果発表を過ぎていればここでも決める）
+- 会議の状態が変わるたびにイベントへ写す（`lib/server/event-sync.ts` の `syncEvent`。`settle`・`decideMeeting`・延長から呼ぶ）
+  - 決定 → `event_date` を決まった日時に、`date_status='fixed'`。**その時間に空いていた人を自動で参加にする**
+    （`applications` に足す。大学はその人の過去の申請から、無ければ「その他」。定員に達したら打ち切る）
+  - 不成立 → `failed`（一覧・詳細で「日程未定」）。延長 → `scheduling` に戻す。自動で参加にした人は消さない
+- 日程調整中は「参加する」を出さず、`api/events/[id]/rsvp` も断る。終了の判定にも仮の日時を使わない
+- 日程調整中に編集画面で日時は変えられない（決まったら入る）。イベント名を変えても会議の名前は変わらない
+- イベントを消すと会議も消える（`meetings.event_id` が `on delete cascade`）
 
 ## 日程調整（カレンダー連携）
 
@@ -335,7 +355,7 @@ secret key で接続したときだけ触れる。
 
 ### 有効にする手順（初回だけ）
 
-1. Supabase の SQL Editor で `supabase/migrations/` の 004〜014 を番号順に実行
+1. Supabase の SQL Editor で `supabase/migrations/` の 004〜015 を番号順に実行
 2. Google Cloud Console でプロジェクトを作り、Google Calendar API を有効にする
 3. OAuth 同意画面：User Type は「外部」、scope は `calendar.freebusy` と
    `calendar.calendarlist.readonly`（どちらも非機密なので審査は不要）。

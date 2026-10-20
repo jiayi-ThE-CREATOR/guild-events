@@ -48,6 +48,8 @@ type Meeting = {
   excluded: string[];
   unreadable: string[] | null;
   attendees: string[] | null;
+  /** イベントの日程調整に使っている会議なら、そのイベント */
+  event_id?: string | null;
 };
 
 type Detail = {
@@ -165,6 +167,7 @@ export default function MeetingPage() {
                 {m.status === "open" && <Tag tone="amber">募集中</Tag>}
                 {m.status === "confirmed" && <Tag tone="grass">決定</Tag>}
                 {m.status === "failed" && <Tag tone="muted">不成立</Tag>}
+                {m.event_id && <Tag tone="navy">イベント</Tag>}
                 <span className="text-ink-soft text-[13px]">主催 {m.organizer}</span>
               </div>
               <h1 className="text-ink mt-1 text-xl leading-snug font-bold md:text-2xl">{m.title}</h1>
@@ -178,6 +181,11 @@ export default function MeetingPage() {
                   </>
                 )}
               </p>
+              {m.event_id && (
+                <Link href={`/events/${m.event_id}`} className={`${btn.text} mt-1.5 inline-block`}>
+                  イベントのページへ（決まると、空いている人は自動で参加になります）
+                </Link>
+              )}
               {m.meet_url && <MeetLink url={m.meet_url} />}
               {m.description && <p className="text-ink mt-1.5 text-sm leading-relaxed whitespace-pre-wrap">{m.description}</p>}
             </div>
