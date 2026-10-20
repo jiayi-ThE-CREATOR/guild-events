@@ -28,22 +28,26 @@ export function pickEmail(labels: (string | null | undefined)[], override?: stri
   return found.find(isGmail) ?? found[0] ?? null;
 }
 
-/** 資料が追加されたときのメール（件名と本文）。link が無いのはゲスト宛て（招待リンクは送れない） */
+/**
+ * 資料が追加されたときのメール（件名と本文）。link が無いのはゲスト宛て（招待リンクは送れない）。
+ * kind はイベントの資料なら「イベント」
+ */
 export function filesMail(
   title: string,
   uploader: string,
   files: { name: string; size: number }[],
   link: string | null,
+  kind: "会議" | "イベント" = "会議",
 ): { subject: string; text: string } {
   const lines = files.map((f) => `・${f.name}（${sizeLabel(f.size)}）`);
   return {
     subject: `【GUILD】「${title}」に資料が追加されました`,
     text: [
-      `${uploader} さんが、会議「${title}」に資料を追加しました。`,
+      `${uploader} さんが、${kind}「${title}」に資料を追加しました。`,
       "",
       ...lines,
       "",
-      link ? `会議ページから見られます：\n${link}` : "招待リンクのページから見られます。",
+      link ? `${kind}ページから見られます：\n${link}` : "招待リンクのページから見られます。",
       "",
       "――",
       "GUILD イベント（このメールは送信専用です）",

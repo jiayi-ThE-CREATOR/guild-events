@@ -8,7 +8,12 @@ import GoogleMeetConnection from "@/components/GoogleMeetConnection";
 import NotifySettings from "@/components/NotifySettings";
 import WeeklySchedule from "@/components/WeeklySchedule";
 import NameSelect from "@/components/NameSelect";
-import { cancelApplication, listApplicationsByName } from "@/lib/data";
+import {
+  cancelApplication,
+  listApplicationsByName,
+  setAttendance,
+} from "@/lib/data";
+import { isMember } from "@/lib/members";
 import { fullDateTime, shortLocation } from "@/lib/format";
 import {
   clearProfile,
@@ -55,11 +60,17 @@ export default function MyPage() {
     };
   }, [profile]);
 
-  async function handleCancel(id: string) {
+  async function handleCancel(row: ApplicationWithEvent) {
     if (!profile) return;
-    if (!window.confirm("この申請をキャンセルしますか？")) return;
+    if (!window.confirm("このイベントへの参加をやめますか？")) return;
     try {
-      await cancelApplication(id);
+      // メンバーはイベントページと同じ経路（Discord に流れる）。
+      // メンバー一覧に無い昔の申請者は、従来どおり申請を取り消すだけ
+      if (isMember(profile.name)) {
+        await setAttendance(row.event_id, profile.name, profile.university, false);
+      } else {
+        await cancelApplication(row.id);
+      }
       await load(profile.name);
     } catch (e) {
       setError((e as Error).message);
@@ -141,11 +152,11 @@ export default function MyPage() {
         <div className="space-y-6 px-4 md:space-y-10 md:px-0">
           <section>
             <h2 className="text-ink mb-2 text-sm font-bold md:mb-4 md:text-base">
-              申込中のイベント（{applied.length}）
+              参加予定のイベント（{applied.length}）
             </h2>
             {applied.length === 0 ? (
               <p className="border-line text-ink-soft rounded-2xl border border-dashed p-6 text-center text-xs">
-                まだ申し込んでいません
+                まだ参加予定のイベントはありません
                 <br />
                 <Link
                   href="/"
@@ -165,7 +176,7 @@ export default function MyPage() {
                       <h3 className="text-ink text-sm font-bold md:text-base">
                         {row.event?.title ?? "（削除されたイベント）"}
                       </h3>
-                      <Badge tone="grass">申請中</Badge>
+                      <Badge tone="grass">参加予定</Badge>
                     </div>
                     {row.event && (
                       <p className="text-ink-soft mt-1 text-xs">
@@ -176,10 +187,10 @@ export default function MyPage() {
                     )}
                     <button
                       type="button"
-                      onClick={() => handleCancel(row.id)}
+                      onClick={() => handleCancel(row)}
                       className="border-line text-ink-soft hover:border-ink-soft mt-3 w-full rounded-xl border py-2.5 text-xs font-semibold transition-colors md:mt-4 md:py-3 md:text-sm"
                     >
-                      申請をキャンセル
+                      参加をやめる
                     </button>
                   </li>
                 ))}
@@ -271,7 +282,7 @@ function NameSearch({
     <div className="border-line px-4 pt-6 md:mx-auto md:max-w-md md:rounded-2xl md:border md:bg-white md:p-8">
       <h1 className="text-ink text-2xl font-bold">マイページ</h1>
       <p className="text-ink-soft mt-1 text-xs md:text-sm">
-        お名前を選ぶと、自分の申込状況を確認できます
+        お名前を選ぶと、自分の参加予定を確認できます
       </p>
 
       <form onSubmit={handleSearch} className="mt-5 space-y-3">
@@ -287,14 +298,14 @@ function NameSearch({
           disabled={!name.trim() || searching}
           className="bg-navy w-full rounded-xl py-3.5 text-[15px] font-bold text-white disabled:opacity-40"
         >
-          {searching ? "検索中…" : "申込状況を見る"}
+          {searching ? "検索中…" : "参加予定を見る"}
         </button>
       </form>
 
       {message && <p className="text-amber mt-3 text-xs">{message}</p>}
 
       <p className="text-ink-soft mt-6 text-center text-[11px]">
-        まだ申し込んでいない方は{" "}
+        イベントへの参加は{" "}
         <Link href="/" className="text-navy underline">
           イベント一覧
         </Link>{" "}

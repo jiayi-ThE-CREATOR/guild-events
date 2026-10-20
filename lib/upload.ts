@@ -1,5 +1,5 @@
 /**
- * 会議の資料をブラウザから上げる（会議ページと会議作成フォームで共用）。
+ * 会議・イベントの資料をブラウザから上げる（会議ページ・会議作成フォーム・イベントページで共用）。
  * 1 つずつ上げ先 URL をもらって Storage に直接 PUT し、最後にまとめて一覧に載せる
  * （メール通知はまとめて 1 通）。
  */
@@ -11,12 +11,22 @@ export async function uploadMeetingFiles(
   uploader: string,
   onProgress?: (done: number) => void,
 ): Promise<void> {
+  await uploadFiles(`/api/meetings/${meetingId}`, files, uploader, onProgress);
+}
+
+/** apiBase：/api/meetings/<id> か /api/events/<id> */
+export async function uploadFiles(
+  apiBase: string,
+  files: File[],
+  uploader: string,
+  onProgress?: (done: number) => void,
+): Promise<void> {
   const tooBig = files.find((f) => f.size > MAX_UPLOAD_BYTES);
   if (tooBig) throw new Error(`「${tooBig.name}」は 50MB を超えています`);
 
   const uploaded = [];
   for (const [i, file] of files.entries()) {
-    const res = await fetch(`/api/meetings/${meetingId}/files/upload-url`, {
+    const res = await fetch(`${apiBase}/files/upload-url`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: file.name, size: file.size }),
@@ -33,7 +43,7 @@ export async function uploadMeetingFiles(
     onProgress?.(i + 1);
   }
 
-  const res = await fetch(`/api/meetings/${meetingId}/files`, {
+  const res = await fetch(`${apiBase}/files`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ uploader, files: uploaded }),

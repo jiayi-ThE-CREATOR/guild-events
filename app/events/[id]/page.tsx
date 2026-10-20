@@ -2,272 +2,299 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { Badge, CampusBadge, SeatBadge } from "@/components/Badge";
-import CalendarLinks from "@/components/CalendarLinks";
+import { useCallback, useEffect, useState } from "react";
+import MeetingFiles, { type FileItem } from "@/components/MeetingFiles";
 import PageHeader from "@/components/PageHeader";
+import { btn, Dropdown, ErrorText, Menu, Note, SectionTitle, Tag } from "@/components/ui";
+import { calendarMenu } from "@/lib/calendar";
 import {
   deleteEvent,
   getEvent,
   isPast,
+  isSupabaseConfigured,
   listApplicantsByEvent,
-  listApplicationsByName,
+  setAttendance,
 } from "@/lib/data";
 import { campusOf, fullDateTime, remainingSeats } from "@/lib/format";
-import { isOrganizer } from "@/lib/members";
-import { loadProfile, useProfile } from "@/lib/profile";
+import { isMember, isOrganizer } from "@/lib/members";
+import { useProfile } from "@/lib/profile";
 import type { ApplicationRecord, EventWithCount } from "@/lib/types";
+import { useIsClient } from "@/lib/useIsClient";
 
+/**
+ * イベントの詳細。会議ページと同じ作り：見出し＋「⋯」メニュー、自分の状態の帯、本文と参加者の 2 列。
+ * 参加はメンバーのワンタップ（申請フォームは無い）。資料は会議と同じ部品で、追加すると参加者にメールが届く。
+ */
 export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const isClient = useIsClient();
   const profile = useProfile();
   const [event, setEvent] = useState<EventWithCount | null>(null);
-  const [deleting, setDeleting] = useState(false);
+  const [applicants, setApplicants] = useState<ApplicationRecord[] | null>(null);
+  // 資料はサーバー経由でしか読めない。読めない環境（モックなど）では欄ごと出さない
+  const [files, setFiles] = useState<FileItem[] | "loading" | "none">(isSupabaseConfigured ? "loading" : "none");
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [alreadyApplied, setAlreadyApplied] = useState(false);
-  const [applicants, setApplicants] = useState<ApplicationRecord[] | null>(
-    null,
+  const [saving, setSaving] = useState(false);
+
+  const fetchEvent = useCallback(
+    () =>
+      Promise.all([
+        getEvent(id),
+        // 一覧の取得に失敗しても本体は表示したいので、ここでは握りつぶす
+        listApplicantsByEvent(id).catch(() => [] as ApplicationRecord[]),
+      ]),
+    [id],
   );
 
-  useEffect(() => {
-    getEvent(id)
-      .then((found) => (found ? setEvent(found) : setNotFound(true)))
-      .catch((e: Error) => setError(e.message));
-
-    // 一覧の取得に失敗しても本体は表示したいので、ここでは握りつぶす
-    listApplicantsByEvent(id)
-      .then(setApplicants)
-      .catch(() => setApplicants([]));
-
-    const profile = loadProfile();
-    if (profile) {
-      listApplicationsByName(profile.name)
-        .then((rows) => setAlreadyApplied(rows.some((r) => r.event_id === id)))
-        .catch(() => setAlreadyApplied(false));
-    }
+  const fetchFiles = useCallback(async (): Promise<FileItem[] | "none"> => {
+    if (!isSupabaseConfigured) return "none";
+    const res = await fetch(`/api/events/${id}/files`);
+    return res.ok ? (await res.json()).files : "none";
   }, [id]);
 
-  async function handleDelete() {
-    if (!event || deleting) return;
-    const count = applicants?.length ?? 0;
-    const warning =
-      count > 0 ? `\n\n申請中の${count}名の記録も一緒に消えます。` : "";
-    if (
-      !window.confirm(
-        `「${event.title}」を削除します。${warning}\n\nこの操作は取り消せません。`,
-      )
-    ) {
-      return;
+  const show = useCallback(([found, rows]: [EventWithCount | null, ApplicationRecord[]]) => {
+    if (!found) return setNotFound(true);
+    setEvent(found);
+    setApplicants(rows);
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    fetchEvent()
+      .then((r) => alive && show(r))
+      .catch((e: Error) => alive && setError(e.message));
+    fetchFiles()
+      .then((f) => alive && setFiles(f))
+      .catch(() => alive && setFiles("none"));
+    return () => {
+      alive = false;
+    };
+  }, [fetchEvent, fetchFiles, show]);
+
+  const load = async () => show(await fetchEvent());
+  const loadFiles = async () => setFiles(await fetchFiles());
+
+  async function attend(attending: boolean) {
+    if (!profile || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await setAttendance(id, profile.name, profile.university, attending);
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
     }
-    setDeleting(true);
+  }
+
+  async function handleDelete() {
+    if (!event || saving) return;
+    const count = applicants?.length ?? 0;
+    const warning = count > 0 ? `\n\n参加予定の${count}名の記録も一緒に消えます。` : "";
+    if (!window.confirm(`「${event.title}」を削除します。${warning}\n\nこの操作は取り消せません。`)) return;
+    setSaving(true);
     try {
       await deleteEvent(event.id);
       router.replace("/");
     } catch (e) {
       setError((e as Error).message);
-      setDeleting(false);
+      setSaving(false);
     }
-  }
-
-  if (error) {
-    return (
-      <div className="md:mx-auto md:max-w-3xl">
-        <PageHeader title="イベント詳細" />
-        <p className="text-amber bg-amber-soft m-4 rounded-xl p-3 text-xs">
-          読み込みに失敗しました：{error}
-        </p>
-      </div>
-    );
-  }
-
-  if (notFound) {
-    return (
-      <div className="md:mx-auto md:max-w-3xl">
-        <PageHeader title="イベント詳細" />
-        <p className="text-ink-soft py-16 text-center text-xs">
-          このイベントは見つかりませんでした
-        </p>
-      </div>
-    );
   }
 
   if (!event) {
     return (
-      <div className="md:mx-auto md:max-w-3xl">
-        <PageHeader title="イベント詳細" />
-        <p className="text-ink-soft py-16 text-center text-xs">読み込み中…</p>
+      <div className="md:mx-auto md:max-w-5xl">
+        <PageHeader title="イベント" />
+        <div className="px-4 py-6 md:px-0">
+          {error ? (
+            <ErrorText>読み込みに失敗しました：{error}</ErrorText>
+          ) : (
+            <Note className="py-10 text-center">{notFound ? "このイベントは見つかりませんでした" : "読み込み中…"}</Note>
+          )}
+        </div>
       </div>
     );
   }
 
   const remaining = remainingSeats(event.capacity, event.applied);
   const past = isPast(event);
+  const campus = campusOf(event.location);
+  const me = isClient && profile ? (applicants ?? []).find((a) => a.name === profile.name) : undefined;
+  const menuItems =
+    isClient && isOrganizer(profile?.name)
+      ? [
+          { label: "このイベントを編集", onClick: () => router.push(`/events/${event.id}/edit`) },
+          { label: "このイベントを削除", onClick: handleDelete, danger: true },
+        ]
+      : [];
 
   return (
-    <div className="md:mx-auto md:max-w-3xl">
-      <PageHeader title="イベント詳細" />
-
-      <div
-        className="cover-stripes h-36 w-full md:h-56 md:rounded-2xl"
-        aria-hidden="true"
-      />
-
-      <div className="px-4 pt-4 md:px-0 md:pt-6">
-        <div className="mb-2 flex flex-wrap gap-1.5">
-          <CampusBadge campus={campusOf(event.location)} />
-          <SeatBadge remaining={remaining} />
-        </div>
-
-        <h1 className="text-ink text-xl leading-snug font-bold md:text-3xl">
-          {event.title}
-        </h1>
-
-        <dl className="border-line mt-4 divide-y divide-[var(--color-line)] rounded-2xl border md:mt-6 md:bg-white">
-          <Row label="日時" value={fullDateTime(event.event_date)} />
-          <Row label="場所" value={event.location ?? "場所未定"} />
-          <Row
-            label="定員"
-            value={
-              event.capacity === null
-                ? "定員なし"
-                : `${event.capacity}名（残り${remaining}席）`
-            }
-          />
-        </dl>
-
-        {event.description && (
-          <p className="text-ink-soft mt-4 text-sm leading-relaxed whitespace-pre-wrap md:mt-6 md:text-base">
-            {event.description}
-          </p>
-        )}
-      </div>
-
-      {/* PC では全幅の帯にせず、左寄せのボタン＋補足の並びにする */}
-      <div className="px-4 pt-6 md:flex md:items-center md:gap-4 md:px-0 md:pt-8">
-        {past ? (
-          <>
-            <div className="bg-canvas text-ink-soft w-full rounded-xl py-3.5 text-center text-[15px] font-bold md:w-auto md:px-12">
-              このイベントは終了しました
-            </div>
-            <p className="text-ink-soft mt-2 text-center text-[11px] md:mt-0 md:text-left md:text-xs">
-              {alreadyApplied ? "参加ありがとうございました" : ""}
-            </p>
-          </>
-        ) : alreadyApplied ? (
-          <>
-            <div className="bg-canvas text-ink-soft w-full rounded-xl py-3.5 text-center text-[15px] font-bold md:w-auto md:px-12">
-              申請済み
-            </div>
-            <p className="text-ink-soft mt-2 text-center text-[11px] md:mt-0 md:text-left md:text-xs">
-              取り消しは{" "}
-              <Link href="/mypage" className="text-navy underline">
-                マイページ
-              </Link>{" "}
-              から
-            </p>
-          </>
-        ) : remaining !== null && remaining <= 0 ? (
-          <>
-            <div className="bg-canvas text-ink-soft w-full rounded-xl py-3.5 text-center text-[15px] font-bold md:w-auto md:px-12">
-              満席
-            </div>
-            <p className="text-ink-soft mt-2 text-center text-[11px] md:mt-0 md:text-left md:text-xs">
-              キャンセルが出ると再び申請できます
-            </p>
-          </>
-        ) : (
-          <>
-            <Link
-              href={`/events/${event.id}/apply`}
-              className="bg-grass block w-full rounded-xl py-3.5 text-center text-[15px] font-bold text-white shadow-[0_6px_18px_rgba(0,179,126,0.35)] md:w-auto md:px-12"
-            >
-              参加申請する
-            </Link>
-            <p className="text-ink-soft mt-2 text-center text-[11px] md:mt-0 md:text-left md:text-xs">
-              キャンセルはマイページからいつでも
-            </p>
-          </>
-        )}
-      </div>
-
-      {alreadyApplied && !past && (
-        <div className="px-4 pt-6 md:px-0 md:pt-8">
-          <CalendarLinks event={event} />
-        </div>
-      )}
-
-      <section className="px-4 pt-8 md:px-0 md:pt-10">
-        <h2 className="text-ink mb-3 text-sm font-bold md:text-base">
-          参加者（{applicants?.length ?? 0}）
-        </h2>
-
-        {applicants === null && (
-          <p className="text-ink-soft py-6 text-center text-xs">読み込み中…</p>
-        )}
-
-        {applicants?.length === 0 && (
-          <p className="border-line text-ink-soft rounded-2xl border border-dashed p-6 text-center text-xs">
-            まだ申請はありません
-          </p>
-        )}
-
-        {applicants !== null && applicants.length > 0 && (
-          <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
-            {applicants.map((a) => (
-              <li
-                key={a.id}
-                className="border-line flex items-center gap-2.5 rounded-xl border bg-white px-3 py-2.5"
-              >
-                <span className="bg-navy-soft text-navy flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold">
-                  {a.name.trim().charAt(0)}
-                </span>
-                <span className="text-ink min-w-0 flex-1 truncate text-sm font-semibold">
-                  {a.name}
-                </span>
-                {a.status === "attended" && (
-                  <Badge tone="outline">出席済</Badge>
+    <div className="md:mx-auto md:max-w-5xl">
+      <PageHeader title="イベント" />
+      <div className="px-4 pt-3 pb-10 md:px-0 md:pt-1">
+        {/* 見出し */}
+        <header className="border-line border-b pb-3">
+          <div className="flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <StatusTag past={past} remaining={remaining} />
+                {(campus === "阪大" || campus === "京大") && (
+                  <span className={`text-[13px] font-semibold ${campus === "阪大" ? "text-osaka" : "text-kyoto"}`}>{campus}</span>
                 )}
-                <Badge tone="navy">{a.university}</Badge>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+              </div>
+              <h1 className="text-ink mt-1 text-xl leading-snug font-bold md:text-2xl">{event.title}</h1>
+              <p className="text-ink-soft mt-1 text-[13px] leading-relaxed">
+                <span className="text-ink font-semibold whitespace-nowrap">{fullDateTime(event.event_date)}〜</span>
+                {` · ${event.location ?? "場所未定"} · `}
+                {event.capacity === null ? "定員なし" : `定員 ${event.capacity}人（残り ${remaining}）`}
+              </p>
+              {event.description && (
+                <p className="text-ink mt-1.5 text-sm leading-relaxed whitespace-pre-wrap">{event.description}</p>
+              )}
+            </div>
+            <Menu items={menuItems} />
+          </div>
+        </header>
 
-      {/* 運営だけに出す。取り消せない操作なので他と離して置く */}
-      {isOrganizer(profile?.name) && (
-        <section className="px-4 pt-10 pb-2 md:px-0 md:pt-12">
-          <h2 className="text-ink-soft mb-2 text-xs font-bold">運営メニュー</h2>
-          <Link
-            href={`/events/${event.id}/edit`}
-            className="border-line text-ink hover:border-navy mb-2 block w-full rounded-xl border py-3 text-center text-sm font-bold transition-colors md:mr-2 md:mb-0 md:inline-block md:w-auto md:px-8"
-          >
-            このイベントを編集
-          </Link>
-          <button
-            type="button"
-            onClick={handleDelete}
-            disabled={deleting}
-            className="border-kyoto-soft text-kyoto hover:bg-kyoto w-full rounded-xl border py-3 text-sm font-bold transition-colors hover:text-white disabled:opacity-40 md:w-auto md:px-8"
-          >
-            {deleting ? "削除中…" : "このイベントを削除"}
-          </button>
-          <p className="text-ink-soft mt-2 text-[11px]">
-            イベントを消すと、そのイベントへの申請もすべて消えます。元に戻せません。
-          </p>
-        </section>
-      )}
+        {error && <div className="mt-3"><ErrorText>{error}</ErrorText></div>}
+
+        {isClient && (
+          <YouBar
+            event={event}
+            me={me}
+            name={profile?.name ?? null}
+            past={past}
+            full={remaining !== null && remaining <= 0}
+            saving={saving}
+            onAttend={attend}
+          />
+        )}
+
+        <div className="mt-4 grid gap-6 md:grid-cols-[1fr_320px]">
+          <div>
+            {Array.isArray(files) ? (
+              <MeetingFiles
+                files={files}
+                downloadBase={`/api/events/${event.id}/files`}
+                apiBase={isClient && isMember(profile?.name ?? "") ? `/api/events/${event.id}` : undefined}
+                uploader={profile?.name ?? null}
+                onChanged={loadFiles}
+              />
+            ) : files === "loading" ? (
+              <Note>資料を読み込み中…</Note>
+            ) : null}
+          </div>
+          <aside className="md:border-line md:border-l md:pl-6">
+            <People applicants={applicants} capacity={event.capacity} />
+          </aside>
+        </div>
+      </div>
     </div>
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function StatusTag({ past, remaining }: { past: boolean; remaining: number | null }) {
+  if (past) return <Tag tone="muted">終了</Tag>;
+  if (remaining === 0) return <Tag tone="muted">満席</Tag>;
+  if (remaining !== null && remaining <= 5) return <Tag tone="amber">あと{remaining}席</Tag>;
+  return <Tag tone="grass">受付中</Tag>;
+}
+
+/** 自分の状態を 1 行で。操作はボタンで横に並べる */
+function YouBar({
+  event,
+  me,
+  name,
+  past,
+  full,
+  saving,
+  onAttend,
+}: {
+  event: EventWithCount;
+  me: ApplicationRecord | undefined;
+  name: string | null;
+  past: boolean;
+  full: boolean;
+  saving: boolean;
+  onAttend: (attending: boolean) => void;
+}) {
+  if (past) {
+    return (
+      <Note className="mt-3">
+        このイベントは終了しました{me ? "。参加ありがとうございました" : ""}
+      </Note>
+    );
+  }
+  if (!name) {
+    return (
+      <Note className="mt-3">
+        <Link href="/mypage" className="text-navy underline">マイページ</Link> で名前を選ぶと、ワンタップで参加できます。
+      </Note>
+    );
+  }
+  if (!me && !isMember(name)) {
+    return <Note className="mt-3">参加できるのは GUILD のメンバーだけです（マイページで選んだ名前がメンバー一覧にありません）。</Note>;
+  }
+
+  const text = me?.status === "attended" ? "出席済み" : me ? "参加予定です" : full ? "満席です" : "まだ参加していません";
   return (
-    <div className="flex gap-4 px-4 py-3">
-      <dt className="text-ink-soft w-12 shrink-0 text-xs">{label}</dt>
-      <dd className="text-ink text-sm font-semibold">{value}</dd>
+    <div className={`mt-3 rounded-xl px-3.5 py-2.5 ${me ? "bg-grass-soft/60" : "bg-navy-soft/60"}`}>
+      <div className="flex flex-col gap-2 md:flex-row md:items-center">
+        <p className="text-ink min-w-0 flex-1 text-sm">
+          あなた：<b>{text}</b>
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {me && (
+            <Dropdown
+              label="カレンダーに追加"
+              items={calendarMenu(event)}
+            />
+          )}
+          {me?.status === "applied" && (
+            <button type="button" disabled={saving} onClick={() => onAttend(false)} className={btn.secondary}>
+              参加をやめる
+            </button>
+          )}
+          {!me && !full && (
+            <button type="button" disabled={saving} onClick={() => onAttend(true)} className={btn.primary}>
+              参加する
+            </button>
+          )}
+        </div>
+      </div>
+      {!me && full && <Note className="mt-1.5">キャンセルが出ると参加できます。</Note>}
+      {me && <Note className="mt-1.5">終了時刻は登録されていないため、カレンダーには開始から 2 時間で入ります。</Note>}
     </div>
+  );
+}
+
+/** 参加者を小さなラベルで並べる（申請順） */
+function People({ applicants, capacity }: { applicants: ApplicationRecord[] | null; capacity: number | null }) {
+  const n = applicants?.length ?? 0;
+  return (
+    <section>
+      <SectionTitle title="参加者" meta={capacity === null ? `${n}人` : `${n}/${capacity}人`} />
+      {applicants === null ? (
+        <Note>読み込み中…</Note>
+      ) : n === 0 ? (
+        <p className="text-ink-soft text-[13px]">まだ参加者はいません</p>
+      ) : (
+        <ul className="flex flex-wrap gap-1.5">
+          {applicants.map((a) => (
+            <li
+              key={a.id}
+              className="border-line text-ink flex items-center gap-1.5 rounded-full border bg-white py-1 pr-3 pl-3 text-[13px]"
+            >
+              {a.name}
+              {a.status === "attended" && <span className="text-grass text-xs font-bold">出席済</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

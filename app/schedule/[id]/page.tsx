@@ -279,7 +279,7 @@ export default function MeetingPage() {
           <MeetingFiles
             files={detail.files}
             downloadBase={`/api/meetings/${m.id}/files`}
-            meetingId={m.id}
+            apiBase={`/api/meetings/${m.id}`}
             uploader={isClient && profile ? profile.name : null}
             onChanged={refresh}
           />

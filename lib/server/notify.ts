@@ -57,3 +57,20 @@ export async function notifyFilesAdded(
     sendBcc([...new Set(guestOnly)], forGuests.subject, forGuests.text),
   ]);
 }
+
+/** イベントに資料が追加されたことを、上げた人以外の参加者（メンバー）にメールで知らせる */
+export async function notifyEventFilesAdded(
+  admin: SupabaseClient,
+  opts: {
+    event: { id: string; title: string };
+    attendees: string[];
+    uploader: string;
+    files: { name: string; size: number }[];
+    origin: string;
+  },
+): Promise<void> {
+  const { event, attendees, uploader, files, origin } = opts;
+  const emails = await notifyEmails(admin, attendees.filter((k) => k !== uploader));
+  const mail = filesMail(event.title, uploader, files, `${origin}/events/${event.id}`, "イベント");
+  await sendBcc([...new Set(emails.values())], mail.subject, mail.text);
+}
