@@ -72,6 +72,8 @@ export function remainingSeats(capacity: number | null, applied: number) {
  */
 export function composeLocation(venue: Campus, detail: string): string {
   const trimmed = detail.trim();
+  // その他（学外の会場など）は詳細をそのまま場所にする（詳細は必須）
+  if (venue === "その他") return trimmed;
   if (venue === "オンライン") {
     return trimmed ? `オンライン（${trimmed}）` : "オンライン";
   }
@@ -91,7 +93,8 @@ export function parseLocation(location: string | null): {
     return { venue: "阪大", detail: value.replace(/^大阪大学\s*/, "") };
   if (value.startsWith("京都大学"))
     return { venue: "京大", detail: value.replace(/^京都大学\s*/, "") };
-  return { venue: "", detail: value };
+  // どれにも当てはまらない場所は「その他」で、全体を詳細に戻す
+  return value ? { venue: "その他", detail: value } : { venue: "", detail: "" };
 }
 
 /** ISO → input[type=datetime-local] の値（端末のローカル時刻） */
