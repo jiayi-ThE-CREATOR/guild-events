@@ -28,6 +28,9 @@ export type EventSchedule = {
 
 /** イベントの長さの選択肢（分） */
 const DURATIONS = [60, 90, 120, 180, 240];
+/** 「時間帯で決める」の時刻（時）。会議の長さの上限（8 時間）を超えないようにする */
+const WINDOW_HOURS = Array.from({ length: 25 }, (_, h) => h);
+const MAX_WINDOW_HOURS = 8;
 
 /**
  * 作成と編集で共用するイベントのフォーム（見た目は会議の作成フォームに合わせる）。
@@ -74,7 +77,12 @@ export default function EventForm({
     return new Set(me ? [me] : []);
   });
   const [connected, setConnected] = useState<string[] | null>(null);
+  // 長さだけ決めて候補の中で探す（length）か、毎日同じ時間帯（例：18〜20時）に固定する（window）か。
+  // window は候補の各日の時間帯をその時間帯ちょうどにし、長さを時間帯の長さにする（決め方は会議と同じ）
+  const [lengthMode, setLengthMode] = useState<"length" | "window">("length");
   const [durationMin, setDurationMin] = useState(120);
+  const [windowStart, setWindowStart] = useState(18);
+  const [windowEnd, setWindowEnd] = useState(20);
   const [deadlineHours, setDeadlineHours] = useState(72);
   const [ranges, setRanges] = useState<RangeRow[]>(() => [
     { fromDate: jstDate(7), toDate: jstDate(14), startHour: 10, endHour: 21 },
@@ -125,9 +133,18 @@ export default function EventForm({
           ? {
               organizer,
               participants: MEMBERS.filter((m) => participants.has(m)),
-              durationMin,
+              ...(lengthMode === "window"
+                ? {
+                    durationMin: (windowEnd - windowStart) * 60,
+                    ranges: ranges.map((r) => ({
+                      fromDate: r.fromDate,
+                      toDate: r.toDate,
+                      dayStartMin: windowStart * 60,
+                      dayEndMin: windowEnd * 60,
+                    })),
+                  }
+                : { durationMin, ranges: toCandidateRanges(ranges) }),
               deadlineHours,
-              ranges: toCandidateRanges(ranges),
             }
           : null,
       );
@@ -206,26 +223,68 @@ export default function EventForm({
             </Note>
           </fieldset>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="イベントの長さ" htmlFor="duration">
-              <select id="duration" value={durationMin} onChange={(e) => setDurationMin(Number(e.target.value))} className={field}>
+          <Field label="イベントの長さ">
+            <div className="flex">
+              <Segmented
+                value={lengthMode}
+                onChange={setLengthMode}
+                options={[
+                  { value: "length", label: "長さで決める" },
+                  { value: "window", label: "時間帯で決める" },
+                ]}
+              />
+            </div>
+            {lengthMode === "length" ? (
+              <select aria-label="イベントの長さ" value={durationMin} onChange={(e) => setDurationMin(Number(e.target.value))} className={`${field} mt-2`}>
                 {DURATIONS.map((m) => (
                   <option key={m} value={m}>{m % 60 === 0 ? `${m / 60}時間` : `${Math.floor(m / 60)}時間${m % 60}分`}</option>
                 ))}
               </select>
-            </Field>
-            <Field label="結果発表" htmlFor="deadline">
-              <select id="deadline" value={deadlineHours} onChange={(e) => setDeadlineHours(Number(e.target.value))} className={field}>
-                {MEETING_DEADLINE_HOURS.map((h) => (
-                  <option key={h} value={h}>{hoursLabel(h)}</option>
-                ))}
-              </select>
-            </Field>
-          </div>
+            ) : (
+              <div className="mt-2 flex items-center gap-1.5">
+                <select
+                  aria-label="何時から"
+                  value={windowStart}
+                  onChange={(e) => {
+                    // 始まりを動かしたら、長さを保ったまま終わりも動かす
+                    const next = Number(e.target.value);
+                    setWindowEnd(Math.min(next + (windowEnd - windowStart), 24));
+                    setWindowStart(next);
+                  }}
+                  className={`${field} min-w-0 flex-1`}
+                >
+                  {WINDOW_HOURS.slice(0, 24).map((h) => <option key={h} value={h}>{h}時</option>)}
+                </select>
+                <span className="text-ink-soft text-xs">〜</span>
+                <select aria-label="何時まで" value={windowEnd} onChange={(e) => setWindowEnd(Number(e.target.value))} className={`${field} min-w-0 flex-1`}>
+                  {WINDOW_HOURS.filter((h) => h > windowStart && h - windowStart <= MAX_WINDOW_HOURS).map((h) => (
+                    <option key={h} value={h}>{h}時</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <Note className="mt-1.5">
+              {lengthMode === "length"
+                ? "候補の時間帯の中で、この長さがそろう一番早い時間に決まります（始まる時刻は決まっていない）。"
+                : `候補の日のうち、${windowStart}時〜${windowEnd}時がそろう一番早い日に決まります。`}
+            </Note>
+          </Field>
+
+          <Field label="結果発表" htmlFor="deadline">
+            <select id="deadline" value={deadlineHours} onChange={(e) => setDeadlineHours(Number(e.target.value))} className={field}>
+              {MEETING_DEADLINE_HOURS.map((h) => (
+                <option key={h} value={h}>{hoursLabel(h)}</option>
+              ))}
+            </select>
+          </Field>
 
           <Field label={`候補（${ranges.length}件）`} required>
-            <RangesInput ranges={ranges} onChange={setRanges} field={field} />
-            <Note className="mt-1.5">1 日だけなら、始まりと終わりを同じ日に。結果発表より後の時間から選ばれます。</Note>
+            <RangesInput ranges={ranges} onChange={setRanges} field={field} datesOnly={lengthMode === "window"} />
+            <Note className="mt-1.5">
+              {lengthMode === "window"
+                ? "日付だけ選びます。1 日だけなら、始まりと終わりを同じ日に。"
+                : "1 日だけなら、始まりと終わりを同じ日に。結果発表より後の時間から選ばれます。"}
+            </Note>
           </Field>
         </>
       ) : (
