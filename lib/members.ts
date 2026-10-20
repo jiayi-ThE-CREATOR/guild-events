@@ -10,19 +10,8 @@
  */
 export const MEMBERS = [
   "ゆうき",
-  "仙入功樹",
   "王佳翌＿おう",
-  "笠井翔洋",
-  "Keita Komatsu",
-  "Nao",
-  "Yorito Shimada",
-  "あき",
-  "きむら",
   "しゅんや",
-  "ゆうか",
-  "冨山快治",
-  "嶋田 千真",
-  "木野本　輝",
   "清水崇仁郎",
   "政岡桜輔",
   "松下大輔",
@@ -43,7 +32,7 @@ export function isMember(name: string): boolean {
  * URL を直接開いたり API を直接叩けば誰でも編集・削除できてしまう点は変わらない。
  * 本当に絞るならログイン（Supabase Auth）＋ RLS が必要。
  */
-export const ORGANIZERS: readonly string[] = ["きむら"];
+export const ORGANIZERS: readonly string[] = ["王佳翌＿おう"];
 
 export function isOrganizer(name: string | null | undefined): boolean {
   return name != null && ORGANIZERS.includes(name);
