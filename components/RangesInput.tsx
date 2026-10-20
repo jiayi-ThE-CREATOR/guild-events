@@ -44,11 +44,14 @@ export default function RangesInput({
   ranges,
   onChange,
   field,
+  datesOnly = false,
 }: {
   ranges: RangeRow[];
   onChange: (rows: RangeRow[]) => void;
   /** 入力欄の見た目（呼び出し側のフォームに合わせる） */
   field: string;
+  /** 日付だけを選ばせる（時間帯は呼び出し側でまとめて決めるとき。行の時刻は使われない） */
+  datesOnly?: boolean;
 }) {
   return (
     <>
@@ -62,7 +65,13 @@ export default function RangesInput({
                 <input aria-label={`候補${i + 1} いつから`} type="date" value={r.fromDate} min={jstDate(0)} onChange={(e) => set({ fromDate: e.target.value, toDate: r.toDate < e.target.value ? e.target.value : r.toDate })} className={`${field} min-w-0 flex-1`} required />
                 <span className="text-ink-soft text-xs">〜</span>
                 <input aria-label={`候補${i + 1} いつまで`} type="date" value={r.toDate} min={r.fromDate} onChange={(e) => set({ toDate: e.target.value })} className={`${field} min-w-0 flex-1`} required />
+                {datesOnly && ranges.length > 1 && (
+                  <button type="button" aria-label={`候補${i + 1}を消す`} onClick={() => onChange(ranges.filter((_, j) => j !== i))} className="text-ink-soft shrink-0 px-2 text-lg leading-none">
+                    ×
+                  </button>
+                )}
               </div>
+              {!datesOnly && (
               <div className="mt-1.5 flex items-center gap-1.5">
                 <select aria-label={`候補${i + 1} 何時から`} value={r.startHour} onChange={(e) => set({ startHour: Number(e.target.value) })} className={`${field} min-w-0 flex-1`}>
                   {HOURS.slice(0, 24).map((h) => <option key={h} value={h}>{h}時</option>)}
@@ -77,6 +86,7 @@ export default function RangesInput({
                   </button>
                 )}
               </div>
+              )}
             </li>
           );
         })}
