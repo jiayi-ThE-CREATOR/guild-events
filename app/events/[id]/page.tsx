@@ -16,15 +16,30 @@ import {
   setAttendance,
 } from "@/lib/data";
 import { campusOf, fullDateTime, remainingSeats } from "@/lib/format";
+import { durationLabel } from "@/lib/meetings";
 import { isMember, isOrganizer } from "@/lib/members";
 import { useProfile } from "@/lib/profile";
-import type { ApplicationRecord, EventWithCount } from "@/lib/types";
+import { rangeLabel, type CandidateRange } from "@/lib/ranges";
+import { isScheduled, type ApplicationRecord, type EventWithCount } from "@/lib/types";
 import { useIsClient } from "@/lib/useIsClient";
 
 /**
  * イベントの詳細。会議ページと同じ作り：見出し＋「⋯」メニュー、自分の状態の帯、本文と参加者の 2 列。
  * 参加はメンバーのワンタップ（申請フォームは無い）。資料は会議と同じ部品で、追加すると参加者にメールが届く。
+ * 日程調整中のイベントは、つないでいる会議の要約と、会議ページ（予定を入れる場所）への導線を出す。
  */
+
+/** api/events/[id]/schedule の要約 */
+type Schedule = {
+  id: string;
+  status: "open" | "confirmed" | "failed";
+  organizer: string;
+  participants: number;
+  duration_min: number;
+  ranges: CandidateRange[];
+  deadline: string;
+  entered: { done: number; of: number } | null;
+};
 export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -37,6 +52,7 @@ export default function EventDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [schedule, setSchedule] = useState<Schedule | null>(null);
 
   const fetchEvent = useCallback(
     () =>
@@ -73,6 +89,24 @@ export default function EventDetailPage() {
     };
   }, [fetchEvent, fetchFiles, show]);
 
+  // 日程調整中・不成立のイベントだけ、会議の要約を読む。ここで結果発表を迎えたらイベントを読み直す
+  const dateStatus = event?.date_status;
+  useEffect(() => {
+    if (!dateStatus || dateStatus === "fixed" || !isSupabaseConfigured) return;
+    let alive = true;
+    fetch(`/api/events/${id}/schedule`)
+      .then((res) => res.json())
+      .then(async (json) => {
+        if (!alive) return;
+        setSchedule(json.meeting ?? null);
+        if (json.settled) show(await fetchEvent());
+      })
+      .catch(() => alive && setSchedule(null));
+    return () => {
+      alive = false;
+    };
+  }, [id, dateStatus, fetchEvent, show]);
+
   const load = async () => show(await fetchEvent());
   const loadFiles = async () => setFiles(await fetchFiles());
 
@@ -93,7 +127,9 @@ export default function EventDetailPage() {
   async function handleDelete() {
     if (!event || saving) return;
     const count = applicants?.length ?? 0;
-    const warning = count > 0 ? `\n\n参加予定の${count}名の記録も一緒に消えます。` : "";
+    const warning =
+      (count > 0 ? `\n\n参加予定の${count}名の記録も一緒に消えます。` : "") +
+      (isScheduled(event) ? "" : "\n\n日程調整（会議のページ・入れた予定）も一緒に消えます。");
     if (!window.confirm(`「${event.title}」を削除します。${warning}\n\nこの操作は取り消せません。`)) return;
     setSaving(true);
     try {
@@ -121,7 +157,9 @@ export default function EventDetailPage() {
   }
 
   const remaining = remainingSeats(event.capacity, event.applied);
-  const past = isPast(event);
+  const fixed = isScheduled(event);
+  // 日程調整中の event_date は仮なので、終了の判定に使わない
+  const past = fixed && isPast(event);
   const campus = campusOf(event.location);
   const me = isClient && profile ? (applicants ?? []).find((a) => a.name === profile.name) : undefined;
   const menuItems =
@@ -141,14 +179,20 @@ export default function EventDetailPage() {
           <div className="flex items-start gap-2">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <StatusTag past={past} remaining={remaining} />
+                <StatusTag past={past} remaining={remaining} dateStatus={event.date_status} />
                 {(campus === "阪大" || campus === "京大") && (
                   <span className={`text-[13px] font-semibold ${campus === "阪大" ? "text-osaka" : "text-kyoto"}`}>{campus}</span>
                 )}
               </div>
               <h1 className="text-ink mt-1 text-xl leading-snug font-bold md:text-2xl">{event.title}</h1>
               <p className="text-ink-soft mt-1 text-[13px] leading-relaxed">
-                <span className="text-ink font-semibold whitespace-nowrap">{fullDateTime(event.event_date)}〜</span>
+                <span className="text-ink font-semibold whitespace-nowrap">
+                  {fixed
+                    ? `${fullDateTime(event.event_date)}〜`
+                    : event.date_status === "failed"
+                      ? "日時未定"
+                      : `日程調整中${event.schedule_deadline ? `（${fullDateTime(event.schedule_deadline)} 結果発表）` : ""}`}
+                </span>
                 {` · ${event.location ?? "場所未定"} · `}
                 {event.capacity === null ? "定員なし" : `定員 ${event.capacity}人（残り ${remaining}）`}
               </p>
@@ -162,7 +206,9 @@ export default function EventDetailPage() {
 
         {error && <div className="mt-3"><ErrorText>{error}</ErrorText></div>}
 
-        {isClient && (
+        {!fixed && <ScheduleBar status={event.date_status!} schedule={schedule} />}
+
+        {isClient && fixed && (
           <YouBar
             event={event}
             me={me}
@@ -197,11 +243,61 @@ export default function EventDetailPage() {
   );
 }
 
-function StatusTag({ past, remaining }: { past: boolean; remaining: number | null }) {
+function StatusTag({
+  past,
+  remaining,
+  dateStatus,
+}: {
+  past: boolean;
+  remaining: number | null;
+  dateStatus?: EventWithCount["date_status"];
+}) {
+  if (dateStatus === "scheduling") return <Tag tone="amber">日程調整中</Tag>;
+  if (dateStatus === "failed") return <Tag tone="muted">日程未定</Tag>;
   if (past) return <Tag tone="muted">終了</Tag>;
   if (remaining === 0) return <Tag tone="muted">満席</Tag>;
   if (remaining !== null && remaining <= 5) return <Tag tone="amber">あと{remaining}席</Tag>;
   return <Tag tone="grass">受付中</Tag>;
+}
+
+/**
+ * 日程調整中・不成立のときの帯。予定を入れる・不参加にする・延長するなどは会議ページで行う
+ * （会議と同じ画面をそのまま使う）。決まると、その時間に空いている人は自動で参加になる
+ */
+function ScheduleBar({ status, schedule }: { status: "scheduling" | "failed" | "fixed"; schedule: Schedule | null }) {
+  return (
+    <div className={`mt-3 rounded-xl px-3.5 py-2.5 ${status === "failed" ? "bg-canvas" : "bg-amber-soft/60"}`}>
+      <div className="flex flex-col gap-2 md:flex-row md:items-center">
+        <div className="min-w-0 flex-1 text-sm">
+          {status === "failed" ? (
+            <p className="text-ink"><b>候補の中に、そろう時間がありませんでした</b></p>
+          ) : (
+            <p className="text-ink">
+              <b>みんなの予定から日時を決めています</b>
+              {schedule?.entered && (
+                <span className="text-ink-soft ml-2 text-[13px]">予定入力 {schedule.entered.done}/{schedule.entered.of}人</span>
+              )}
+            </p>
+          )}
+          {schedule && (
+            <Note className="mt-0.5">
+              主催 {schedule.organizer} · {durationLabel(schedule.duration_min)} · 候補 {schedule.ranges.map(rangeLabel).join(" / ")}
+            </Note>
+          )}
+        </div>
+        {schedule && (
+          <Link href={`/schedule/${schedule.id}`} className={`${status === "failed" ? btn.secondary : btn.primary} shrink-0 text-center`}>
+            {status === "failed" ? "日程調整ページで募集をやり直す" : "日程調整ページで予定を入れる"}
+          </Link>
+        )}
+      </div>
+      {status === "scheduling" && (
+        <Note className="mt-1.5">
+          結果発表で、選ばれた人の予定から全員（だめなら 1 人欠け）がそろう一番早い時間に決まります。決まると、その時間に空いている人は自動で参加になります。
+        </Note>
+      )}
+    </div>
+  );
 }
 
 /** 自分の状態を 1 行で。操作はボタンで横に並べる */

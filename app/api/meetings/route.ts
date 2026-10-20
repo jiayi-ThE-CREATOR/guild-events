@@ -12,7 +12,7 @@ import { decideMeeting } from "@/lib/server/decide";
 import { enteredCounts, settleDue, type Meeting } from "@/lib/server/meetings";
 
 const LIST_FIELDS =
-  "id, title, organizer, participants, duration_min, deadline, status, confirmed_start, created_at";
+  "id, title, organizer, participants, duration_min, deadline, status, confirmed_start, event_id, created_at";
 
 /** 会議の一覧。締切を過ぎたものは返す前に決めておく（定時ジョブより先に開かれた場合） */
 export async function GET(req: NextRequest) {
@@ -52,6 +52,11 @@ type Body = {
   meet?: boolean;
   /** 日時がもう決まっているとき。募集をせず、この日時に決まった会議として作る（候補・長さ・結果発表は使わない） */
   fixed?: { start?: string; end?: string };
+  /**
+   * イベントの日程をこの会議で決めるとき（イベント作成画面の「みんなの予定から決める」）。
+   * 先にイベントを日程調整中で作り、会議の event_id でつなぐ。決まったらイベントに写る（event-sync.ts）
+   */
+  event?: { capacity?: number | null };
 };
 
 const HALF_HOUR = 30 * 60 * 1000;
@@ -90,6 +95,11 @@ function invalid(b: Body): string | null {
       if (problem) return problem;
     }
   }
+  if (b.event) {
+    const cap = b.event.capacity ?? null;
+    if (cap !== null && !(Number.isInteger(cap) && cap >= 1)) return "定員は 1 以上の整数にしてください";
+    if (b.fixed || (b.guests?.length ?? 0) > 0) return "イベントの日程調整では、決まった日時・外部ゲストは使えません";
+  }
   if (b.fixed) return fixedProblem(b.fixed);
   const rangeProblem = rangesProblem(b.ranges);
   if (rangeProblem) return rangeProblem;
@@ -124,6 +134,26 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // イベントの日程調整なら、先にイベントを日程調整中で作る（日時は仮に最初の候補の開始）
+  let eventId: string | null = null;
+  if (b.event) {
+    const { data: ev, error: evError } = await admin
+      .from("events")
+      .insert({
+        title: b.title!.trim(),
+        description: b.description?.trim() || null,
+        location: b.location?.trim() || null,
+        capacity: b.event.capacity ?? null,
+        event_date: new Date(rangeIntervals(b.ranges!)[0].start).toISOString(),
+        date_status: "scheduling",
+        schedule_deadline: new Date(deadline).toISOString(),
+      })
+      .select("id")
+      .single();
+    if (evError) return Response.json({ error: evError.message }, { status: 500 });
+    eventId = ev.id as string;
+  }
+
   const { data, error } = await admin
     .from("meetings")
     .insert({
@@ -136,10 +166,15 @@ export async function POST(req: NextRequest) {
       ranges: b.ranges,
       ...envelope(b.ranges!),
       deadline: new Date(deadline).toISOString(),
+      event_id: eventId,
     })
     .select()
     .single();
-  if (error) return Response.json({ error: error.message }, { status: 500 });
+  if (error) {
+    // 会議が作れなければ、先に作ったイベントも消す（日程の決まらないイベントを残さない）
+    if (eventId) await admin.from("events").delete().eq("id", eventId);
+    return Response.json({ error: error.message }, { status: 500 });
+  }
   let meeting = data as Meeting;
 
   // Google Meet リンク。作れなくても会議は作る（会議ページから作り直せる）
@@ -195,5 +230,5 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     console.error(`[meetings] 募集開始の通知に失敗: ${(e as Error).message}`);
   }
-  return Response.json({ id: meeting.id, guests: guests.map(({ name, url }) => ({ name, url })), meetError });
+  return Response.json({ id: meeting.id, eventId, guests: guests.map(({ name, url }) => ({ name, url })), meetError });
 }

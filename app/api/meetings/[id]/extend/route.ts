@@ -3,6 +3,7 @@ import { MEETING_DEADLINE_HOURS } from "@/lib/meetings";
 import { envelope, rangeIntervals, rangesProblem, type CandidateRange } from "@/lib/ranges";
 import { getAdmin, NOT_CONFIGURED } from "@/lib/server/admin";
 import { notifyExtended } from "@/lib/server/discord";
+import { syncEvent } from "@/lib/server/event-sync";
 import type { Meeting } from "@/lib/server/meetings";
 
 /**
@@ -58,6 +59,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // 決まっていた日時へのあとからの参加登録は、もう意味がないので消す
   if (previous.status !== "open") await admin.from("meeting_rsvps").delete().eq("meeting_id", id);
 
+  await syncEvent(admin, data as Meeting);
   await notifyExtended(data as Meeting, previous, req.nextUrl.origin);
   return Response.json({ ok: true });
 }

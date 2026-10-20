@@ -6,6 +6,7 @@ import { isEmptyLayer } from "../manual";
 import { freeMembers } from "../slots";
 import { availability } from "./availability";
 import { notifyDiscord } from "./discord";
+import { syncEvent } from "./event-sync";
 import { meetingMembers } from "./guests";
 
 export type Meeting = {
@@ -35,6 +36,8 @@ export type Meeting = {
   attendees: string[] | null;
   /** 主催者のアカウントで作った Google Meet のリンク（012）。作っていなければ null */
   meet_url?: string | null;
+  /** イベントの日程調整に使っている会議なら、そのイベント（015）。決まったらイベントに写す（event-sync.ts） */
+  event_id?: string | null;
   created_at: string;
 };
 
@@ -116,6 +119,7 @@ export async function settle(
     const { data: fresh } = await admin.from("meetings").select().eq("id", meeting.id).single();
     return fresh as Meeting;
   }
+  await syncEvent(admin, data as Meeting);
   await notifyDiscord({ ...(data as Meeting), participants: keys }, declined, origin, labels);
   return data as Meeting;
 }
