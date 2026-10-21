@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { PollStart, PollVote } from "@/components/EventPoll";
 import MeetingFiles, { type FileItem } from "@/components/MeetingFiles";
 import PageHeader from "@/components/PageHeader";
 import { btn, Dropdown, ErrorText, MapLink, Menu, Note, SectionTitle, Tag } from "@/components/ui";
@@ -18,6 +19,7 @@ import {
 import { campusOf, fullDateTime, remainingSeats } from "@/lib/format";
 import { durationLabel } from "@/lib/meetings";
 import { isMember, isOrganizer } from "@/lib/members";
+import type { PollOption } from "@/lib/poll";
 import { useProfile } from "@/lib/profile";
 import { rangeLabel, type CandidateRange } from "@/lib/ranges";
 import { isScheduled, type ApplicationRecord, type EventWithCount } from "@/lib/types";
@@ -27,18 +29,21 @@ import { useIsClient } from "@/lib/useIsClient";
  * イベントの詳細。会議ページと同じ作り：見出し＋「⋯」メニュー、自分の状態の帯、本文と参加者の 2 列。
  * 参加はメンバーのワンタップ（申請フォームは無い）。資料は会議と同じ部品で、追加すると参加者にメールが届く。
  * 日程調整中のイベントは、つないでいる会議の要約と、会議ページ（予定を入れる場所）への導線を出す。
+ * 2 回目として、主催者は候補から日程を選んで投票にできる。投票はこのページで行う（EventPoll）。
  */
 
 /** api/events/[id]/schedule の要約 */
 type Schedule = {
   id: string;
-  status: "open" | "confirmed" | "failed";
+  status: "open" | "voting" | "confirmed" | "failed";
   organizer: string;
-  participants: number;
+  participants: string[];
   duration_min: number;
   ranges: CandidateRange[];
   deadline: string;
   entered: { done: number; of: number } | null;
+  /** 投票中（2 回目）だけ */
+  poll: PollOption[] | null;
 };
 export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -91,21 +96,29 @@ export default function EventDetailPage() {
 
   // 日程調整中・不成立のイベントだけ、会議の要約を読む。ここで結果発表を迎えたらイベントを読み直す
   const dateStatus = event?.date_status;
+  const fetchSchedule = useCallback(async (): Promise<{ schedule: Schedule | null; settled: boolean }> => {
+    const json = await (await fetch(`/api/events/${id}/schedule`)).json();
+    return { schedule: json.meeting ? { ...json.meeting, poll: json.poll ?? null } : null, settled: !!json.settled };
+  }, [id]);
   useEffect(() => {
     if (!dateStatus || dateStatus === "fixed" || !isSupabaseConfigured) return;
     let alive = true;
-    fetch(`/api/events/${id}/schedule`)
-      .then((res) => res.json())
-      .then(async (json) => {
+    fetchSchedule()
+      .then(async ({ schedule, settled }) => {
         if (!alive) return;
-        setSchedule(json.meeting ?? null);
-        if (json.settled) show(await fetchEvent());
+        setSchedule(schedule);
+        if (settled) show(await fetchEvent());
       })
       .catch(() => alive && setSchedule(null));
     return () => {
       alive = false;
     };
-  }, [id, dateStatus, fetchEvent, show]);
+  }, [dateStatus, fetchSchedule, fetchEvent, show]);
+  // 投票を始めた・投票した・決めたあと。決まればイベントも変わるので読み直す
+  const reloadSchedule = async () => {
+    setSchedule((await fetchSchedule()).schedule);
+    show(await fetchEvent());
+  };
 
   const load = async () => show(await fetchEvent());
   const loadFiles = async () => setFiles(await fetchFiles());
@@ -207,7 +220,14 @@ export default function EventDetailPage() {
 
         {error && <div className="mt-3"><ErrorText>{error}</ErrorText></div>}
 
-        {!fixed && <ScheduleBar status={event.date_status!} schedule={schedule} />}
+        {!fixed && (
+          <ScheduleBar
+            status={event.date_status!}
+            schedule={schedule}
+            member={isClient ? (profile?.name ?? null) : null}
+            onChanged={reloadSchedule}
+          />
+        )}
 
         {isClient && fixed && (
           <YouBar
@@ -265,7 +285,45 @@ function StatusTag({
  * 日程調整中・不成立のときの帯。予定を入れる・不参加にする・延長するなどは会議ページで行う
  * （会議と同じ画面をそのまま使う）。決まると、その時間に空いている人は自動で参加になる
  */
-function ScheduleBar({ status, schedule }: { status: "scheduling" | "failed" | "fixed"; schedule: Schedule | null }) {
+function ScheduleBar({
+  status,
+  schedule,
+  member,
+  onChanged,
+}: {
+  status: "scheduling" | "failed" | "fixed";
+  schedule: Schedule | null;
+  member: string | null;
+  onChanged: () => Promise<void>;
+}) {
+  const [starting, setStarting] = useState(false);
+  // 投票を始める・先に決めるのは、日程調整の主催者と運営
+  const canManage = !!schedule && !!member && (schedule.organizer === member || isOrganizer(member));
+
+  if (schedule?.status === "voting" && schedule.poll) {
+    return (
+      <section className="bg-amber-soft/60 mt-3 rounded-xl px-3.5 py-3">
+        <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+          <p className="text-ink text-sm">
+            <b>日程を投票で決めています</b>
+            <span className="text-ink-soft ml-2 text-[13px]">締め切り {fullDateTime(schedule.deadline)}</span>
+          </p>
+          <Link href={`/schedule/${schedule.id}`} className={btn.text}>日程調整ページ</Link>
+        </div>
+        <PollVote
+          key={schedule.poll.map((o) => `${o.id}:${o.voters.join(",")}`).join("|")}
+          meetingId={schedule.id}
+          options={schedule.poll}
+          participants={schedule.participants}
+          deadline={schedule.deadline}
+          member={member}
+          canDecide={canManage}
+          onChanged={onChanged}
+        />
+      </section>
+    );
+  }
+
   return (
     <div className={`mt-3 rounded-xl px-3.5 py-2.5 ${status === "failed" ? "bg-canvas" : "bg-amber-soft/60"}`}>
       <div className="flex flex-col gap-2 md:flex-row md:items-center">
@@ -296,6 +354,18 @@ function ScheduleBar({ status, schedule }: { status: "scheduling" | "failed" | "
         <Note className="mt-1.5">
           結果発表で、選ばれた人の予定から全員（だめなら 1 人欠け）がそろう一番早い時間に決まります。決まると、その時間に空いている人は自動で参加になります。
         </Note>
+      )}
+      {status === "scheduling" && schedule?.status === "open" && canManage && (
+        <div className="mt-2">
+          <button type="button" onClick={() => setStarting(!starting)} className={starting ? btn.secondary : btn.text}>
+            {starting ? "閉じる" : "候補から日程を選んで投票にする（2 回目）"}
+          </button>
+          {starting && (
+            <div className="border-line mt-2 rounded-lg border bg-white p-3">
+              <PollStart meetingId={schedule.id} durationMin={schedule.duration_min} onDone={onChanged} />
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

@@ -3,7 +3,7 @@
 /** 作成から何時間後に結果を発表するか（選べる値） */
 export const MEETING_DEADLINE_HOURS = [6, 12, 24, 48, 72, 168];
 
-export type MeetingStatus = "open" | "confirmed" | "failed";
+export type MeetingStatus = "open" | "voting" | "confirmed" | "failed";
 
 export type MeetingSummary = {
   id: string;

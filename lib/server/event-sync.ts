@@ -11,6 +11,7 @@ import type { Meeting } from "./meetings";
  * - 募集中：date_status='scheduling'、event_date は仮に最初の候補の開始、schedule_deadline は結果発表
  * - 決定：event_date を決まった日時に、date_status='fixed'。その時間に空いていた参加者（メンバーだけ）を
  *   参加にする（applications に applied の行を足す）。定員を超える人は DB のトリガーが止めるので、そこで打ち切る
+ * - 投票中（2 回目）：date_status='scheduling' のまま、schedule_deadline を投票の締め切りに
  * - 不成立：date_status='failed'
  * 参加させた人は、あとで募集し直しても消さない（本人が「参加をやめる」で外せる）。
  * 失敗しても会議の決定そのものは止めない（ログだけ）。
@@ -25,6 +26,10 @@ export async function syncEvent(admin: SupabaseClient, meeting: Meeting): Promis
         schedule_deadline: meeting.deadline,
         ...(first ? { event_date: new Date(first.start).toISOString() } : {}),
       });
+      return;
+    }
+    if (meeting.status === "voting") {
+      await update(admin, meeting.event_id, { date_status: "scheduling", schedule_deadline: meeting.deadline });
       return;
     }
     if (meeting.status === "failed") {

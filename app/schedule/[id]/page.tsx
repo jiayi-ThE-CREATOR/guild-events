@@ -42,7 +42,7 @@ type Meeting = {
   day_end_min: number;
   ranges: CandidateRange[] | null;
   deadline: string;
-  status: "open" | "confirmed" | "failed";
+  status: "open" | "voting" | "confirmed" | "failed";
   confirmed_start: string | null;
   confirmed_available: number | null;
   confirmed_total: number | null;
@@ -152,8 +152,9 @@ export default function MeetingPage() {
     ...(m.status === "open" ? [{ label: "募集を締め切って日時を決める", onClick: () => setPanel("reschedule") }] : []),
     ...(m.status === "confirmed" ? [{ label: "日時を変更する", onClick: () => setPanel("reschedule") }] : []),
     { label: m.status === "open" ? "募集を延長する" : "募集をやり直す", onClick: () => setPanel("extend") },
-    ...(m.status !== "failed" ? [{ label: "外部ゲストを招く・管理", onClick: () => setPanel("guests") }] : []),
-    ...(m.status !== "failed" && !m.meet_url ? [{ label: "Google Meet リンクを作る", onClick: createMeet }] : []),
+    // 投票中（イベントの日程調整の 2 回目）はイベントのページで進めるので、やり直し以外は出さない
+    ...(m.status !== "failed" && m.status !== "voting" ? [{ label: "外部ゲストを招く・管理", onClick: () => setPanel("guests") }] : []),
+    ...(m.status !== "failed" && m.status !== "voting" && !m.meet_url ? [{ label: "Google Meet リンクを作る", onClick: createMeet }] : []),
   ];
 
   return (
@@ -166,6 +167,7 @@ export default function MeetingPage() {
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 {m.status === "open" && <Tag tone="amber">募集中</Tag>}
+                {m.status === "voting" && <Tag tone="amber">投票中</Tag>}
                 {m.status === "confirmed" && <Tag tone="grass">決定</Tag>}
                 {m.status === "failed" && <Tag tone="muted">不成立</Tag>}
                 {m.event_id && <Tag tone="navy">イベント</Tag>}
@@ -267,6 +269,21 @@ export default function MeetingPage() {
             }}
             decided={decided}
           />
+        )}
+
+        {m.status === "voting" && (
+          <div className="bg-amber-soft/60 mt-4 rounded-xl px-4 py-3.5">
+            <p className="text-ink text-sm">
+              <b>候補から選んだ日程で投票中です</b>
+              <span className="text-ink-soft ml-2 text-[13px]">締め切り {fullDateTime(m.deadline)}</span>
+            </p>
+            <Note className="mt-1">一番多く「参加できる」が付いた日程に決まります。投票はイベントのページで行います。</Note>
+            {m.event_id && (
+              <Link href={`/events/${m.event_id}`} className={`${btn.primary} mt-2.5 inline-block`}>
+                イベントのページで投票する
+              </Link>
+            )}
+          </div>
         )}
 
         {m.status === "failed" && (
@@ -905,7 +922,9 @@ function ExtendForm({ meeting: m, onDone }: { meeting: Meeting; onDone: () => Pr
       <Note>
         {m.status === "open"
           ? "結果発表を遅らせます。候補も入れ直せます。"
-          : "募集中に戻して、新しい結果発表の時刻にもう一度自動で決めます。決まっていた日時と出欠は取り消しになります（各自の予定はそのまま使います）。"}
+          : m.status === "voting"
+            ? "投票をやめて募集中に戻し、新しい結果発表の時刻にみんなの予定からもう一度決めます。投票の日程と印は消えます。"
+            : "募集中に戻して、新しい結果発表の時刻にもう一度自動で決めます。決まっていた日時と出欠は取り消しになります（各自の予定はそのまま使います）。"}
       </Note>
       <label className="block">
         <span className="text-ink mb-1 block text-[13px] font-semibold">結果発表（今から）</span>
