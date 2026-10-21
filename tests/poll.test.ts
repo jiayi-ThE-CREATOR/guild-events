@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { pickOption, pollStartsProblem, type PollOption } from "../lib/poll.ts";
+import { pickOption, pollOptionsProblem, type PollOption } from "../lib/poll.ts";
 import { pollDecidedMessage, pollOpenedMessage } from "../lib/server/discord.ts";
 import { decidePoll } from "../lib/server/poll.ts";
 import type { Meeting } from "../lib/server/meetings.ts";
@@ -21,13 +21,26 @@ test("一番多く印が付いた日程。同数なら早いほう。誰も付�
   assert.equal(pickOption([opt("d", "2026-11-09T09:00:00.000Z", [])]), null);
 });
 
-test("投票の日程の検査", () => {
+test("投票の時間帯の検査", () => {
   const now = Date.parse("2026-11-01T00:00:00Z");
-  assert.equal(pollStartsProblem([], now), "日程を 1 つ以上選んでください");
-  assert.match(pollStartsProblem(["2026-11-10T09:15:00Z"], now)!, /30 分刻み/);
-  assert.match(pollStartsProblem(["2026-10-30T09:00:00Z"], now)!, /今より後/);
-  assert.match(pollStartsProblem(["2026-11-10T09:00:00Z", "2026-11-10T09:00:00.000Z"], now)!, /2 回/);
-  assert.equal(pollStartsProblem(["2026-11-10T09:00:00Z", "2026-11-10T09:30:00Z"], now), null);
+  const r = (start: string, end: string) => ({ start, end });
+  assert.equal(pollOptionsProblem([], now), "日程を 1 つ以上選んでください");
+  assert.match(pollOptionsProblem([r("2026-11-10T09:15:00Z", "2026-11-10T11:00:00Z")], now)!, /30 分刻み/);
+  assert.match(pollOptionsProblem([r("2026-10-30T09:00:00Z", "2026-10-30T11:00:00Z")], now)!, /今より後/);
+  assert.match(pollOptionsProblem([r("2026-11-10T09:00:00Z", "2026-11-10T09:00:00Z")], now)!, /終わりは始まりより後/);
+  // 日本時間 11/10 22:00〜11/11 01:00 は日をまたぐ
+  assert.match(pollOptionsProblem([r("2026-11-10T13:00:00Z", "2026-11-10T16:00:00Z")], now)!, /その日のうち/);
+  // 日本時間 22:00〜24:00 はよい
+  assert.equal(pollOptionsProblem([r("2026-11-10T13:00:00Z", "2026-11-10T15:00:00Z")], now), null);
+  assert.match(
+    pollOptionsProblem([r("2026-11-10T09:00:00Z", "2026-11-10T11:00:00Z"), r("2026-11-10T09:00:00.000Z", "2026-11-10T12:00:00Z")], now)!,
+    /2 つ/,
+  );
+  // 長さの違う時間帯を並べてよい
+  assert.equal(
+    pollOptionsProblem([r("2026-11-10T09:00:00Z", "2026-11-10T12:00:00Z"), r("2026-11-12T10:00:00Z", "2026-11-12T11:30:00Z")], now),
+    null,
+  );
 });
 
 const meeting = {
@@ -84,12 +97,12 @@ function fakeDb(tables: Record<string, Record<string, unknown>[]>) {
   return { from: query } as unknown as SupabaseClient;
 }
 
-test("締め切りで一番多い日程に決め、イベントに日時を入れ、印を付けた人を参加にする", async () => {
+test("締め切りで一番多い時間帯に決め（長さもその時間帯に）、イベントに日時を入れ、印を付けた人を参加にする", async () => {
   const tables: Record<string, Record<string, unknown>[]> = {
     meetings: [{ ...meeting }],
     meeting_poll_options: [
       { id: "o1", meeting_id: "m1", start_at: "2026-11-10T09:00:00.000Z", end_at: "2026-11-10T11:00:00.000Z" },
-      { id: "o2", meeting_id: "m1", start_at: "2026-11-12T09:00:00.000Z", end_at: "2026-11-12T11:00:00.000Z" },
+      { id: "o2", meeting_id: "m1", start_at: "2026-11-12T09:00:00.000Z", end_at: "2026-11-12T12:00:00.000Z" },
     ],
     meeting_poll_votes: [
       { option_id: "o1", member_name: "x" },
@@ -102,6 +115,8 @@ test("締め切りで一番多い日程に決め、イベントに日時を入�
   const decided = await decidePoll(fakeDb(tables), meeting, "https://x");
   assert.equal(decided.status, "confirmed");
   assert.equal(decided.confirmed_start, "2026-11-12T09:00:00.000Z");
+  // 長さは選んだ時間帯（3 時間）になる
+  assert.equal(decided.duration_min, 180);
   assert.deepEqual(decided.attendees, ["x", "z"]);
   assert.equal(tables.events[0].date_status, "fixed");
   assert.equal(tables.events[0].event_date, "2026-11-12T09:00:00.000Z");
