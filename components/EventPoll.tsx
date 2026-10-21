@@ -8,7 +8,7 @@ import { MAX_POLL_OPTIONS, POLL_DEADLINE_HOURS, type PollOption } from "@/lib/po
 
 /**
  * イベントの日程調整の 2 回目：候補から日程をいくつか選んで、参加者に投票してもらう。
- * PollStart は投票を始めるパネル（1 回目の「今の時点の候補」から選ぶか、日時を足す）、
+ * PollStart は投票を始めるパネル（1 回目の「今の時点の候補」の時間帯から選ぶか、時間帯を足す。どれも始まり・終わりを変えられる）、
  * PollVote は投票中の表（「参加できる」に印を付ける・主催者は先に決められる）。
  */
 
@@ -30,14 +30,14 @@ export function PollStart({
   onDone: () => Promise<void>;
 }) {
   const [preview, setPreview] = useState<Preview | undefined>(undefined);
-  // 選んだ開始時刻（UTC ミリ秒）
-  const [chosen, setChosen] = useState<number[]>([]);
+  // 選んだ時間帯（UTC ミリ秒）。候補から選ぶとその時間帯まるごと、あとから始まり・終わりを動かせる
+  const [chosen, setChosen] = useState<{ start: number; end: number }[]>([]);
   const [deadlineHours, setDeadlineHours] = useState(24);
   const [addDate, setAddDate] = useState("");
   const [addStart, setAddStart] = useState(18 * 60);
+  const [addEnd, setAddEnd] = useState(18 * 60 + durationMin);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const duration = durationMin * 60 * 1000;
 
   // 1 回目の計算の候補（みんなのカレンダーを読むので、パネルを開いたときだけ）
   useEffect(() => {
@@ -52,14 +52,19 @@ export function PollStart({
   }, [meetingId]);
 
   const windows = preview?.result.windows ?? [];
-  const extra = chosen.filter((s) => !windows.some((w) => w.start === s));
-  const toggle = (s: number) =>
-    setChosen(chosen.includes(s) ? chosen.filter((x) => x !== s) : [...chosen, s].sort((a, b) => a - b));
+  const sorted = (list: { start: number; end: number }[]) => [...list].sort((a, b) => a.start - b.start);
+  const picked = (w: { start: number }) => chosen.some((c) => c.start === w.start);
+  const toggle = (w: { start: number; end: number }) =>
+    setChosen(picked(w) ? chosen.filter((c) => c.start !== w.start) : sorted([...chosen, { start: w.start, end: w.end }]));
+  const update = (i: number, patch: Partial<{ start: number; end: number }>) =>
+    setChosen(sorted(chosen.map((c, j) => (j === i ? { ...c, ...patch } : c))));
 
   function addManual() {
-    if (!addDate) return;
-    const s = Date.parse(`${addDate}T00:00:00+09:00`) + addStart * 60 * 1000;
-    if (!chosen.includes(s)) setChosen([...chosen, s].sort((a, b) => a - b));
+    if (!addDate || addEnd <= addStart) return;
+    const day = Date.parse(`${addDate}T00:00:00+09:00`);
+    const start = day + addStart * 60 * 1000;
+    if (chosen.some((c) => c.start === start)) return;
+    setChosen(sorted([...chosen, { start, end: day + addEnd * 60 * 1000 }]));
   }
 
   async function start() {
@@ -70,7 +75,10 @@ export function PollStart({
       const res = await fetch(`/api/meetings/${meetingId}/poll`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ starts: chosen.map((s) => new Date(s).toISOString()), deadlineHours }),
+        body: JSON.stringify({
+          options: chosen.map((c) => ({ start: new Date(c.start).toISOString(), end: new Date(c.end).toISOString() })),
+          deadlineHours,
+        }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
       await onDone();
@@ -83,8 +91,8 @@ export function PollStart({
   return (
     <div className="space-y-3">
       <Note>
-        日程を選んで投票にします（{MAX_POLL_OPTIONS} 個まで）。締め切りで、一番多く「参加できる」が付いた日程に決まり、
-        印を付けた人が自動で参加になります。
+        時間帯を選んで投票にします（{MAX_POLL_OPTIONS} 個まで）。締め切りで、一番多く「参加できる」が付いた時間帯に決まり、
+        その時間帯がイベントの日時になります。印を付けた人は自動で参加になります。
       </Note>
 
       <div>
@@ -92,44 +100,64 @@ export function PollStart({
         {preview === undefined ? (
           <Note>みんなのカレンダーを確認中…</Note>
         ) : windows.length === 0 ? (
-          <Note>今のところ、そろう時間はありません。下で日時を足してください。</Note>
+          <Note>今のところ、そろう時間帯はありません。下で時間帯を足してください。</Note>
         ) : (
           <ul className="border-line divide-line max-h-72 divide-y overflow-y-auto rounded-lg border bg-white">
             {windows.map((w) => (
               <li key={w.start}>
                 <label className="flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm">
-                  <input type="checkbox" checked={chosen.includes(w.start)} onChange={() => toggle(w.start)} className="size-4" />
-                  <span className="text-ink font-semibold tabular-nums">{span(w.start, w.start + duration)}</span>
+                  <input type="checkbox" checked={picked(w)} onChange={() => toggle(w)} className="size-4" />
+                  <span className="text-ink font-semibold tabular-nums">{span(w.start, w.end)}</span>
                 </label>
               </li>
             ))}
           </ul>
         )}
         {preview && preview.result.available !== null && preview.result.available !== preview.result.total && (
-          <Note className="mt-1">全員はそろわないので、1 人欠けの時間を出しています。各時間帯の始まりの時刻です。</Note>
+          <Note className="mt-1">全員はそろわないので、1 人欠けの時間帯を出しています。</Note>
         )}
       </div>
 
       <div>
-        <p className="text-ink mb-1 text-[13px] font-semibold">日時を足す</p>
+        <p className="text-ink mb-1 text-[13px] font-semibold">時間帯を足す</p>
         <div className="flex flex-wrap items-center gap-2">
           <input aria-label="日付" type="date" value={addDate} onChange={(e) => setAddDate(e.target.value)} className={`${field} w-auto`} />
-          <select aria-label="開始時刻" value={addStart} onChange={(e) => setAddStart(Number(e.target.value))} className={`${field} w-auto`}>
-            {HALF_HOURS.map((x) => <option key={x} value={x}>{hm(x)}</option>)}
-          </select>
-          <button type="button" onClick={addManual} disabled={!addDate} className={btn.secondary}>追加</button>
+          <TimeSpan
+            start={addStart}
+            end={addEnd}
+            onChange={(st, en) => {
+              setAddStart(st);
+              setAddEnd(en);
+            }}
+          />
+          <button type="button" onClick={addManual} disabled={!addDate || addEnd <= addStart} className={btn.secondary}>追加</button>
         </div>
-        {extra.length > 0 && (
-          <ul className="mt-2 flex flex-wrap gap-1.5">
-            {extra.map((s) => (
-              <li key={s} className="border-navy bg-navy-soft text-navy flex items-center gap-1 rounded-full border py-1 pr-1.5 pl-3 text-[13px] font-semibold">
-                {span(s, s + duration)}
-                <button type="button" aria-label="外す" onClick={() => toggle(s)} className="px-1 text-sm leading-none">×</button>
-              </li>
-            ))}
-          </ul>
-        )}
       </div>
+
+      {chosen.length > 0 && (
+        <div>
+          <p className="text-ink mb-1 text-[13px] font-semibold">投票にする時間帯（{chosen.length}個）</p>
+          <ul className="space-y-1.5">
+            {chosen.map((c, i) => {
+              const day = c.start - (((c.start + JST) % DAY) + DAY) % DAY;
+              const min = (t: number) => Math.round((t - day) / 60000);
+              return (
+                <li key={c.start} className="border-line flex flex-wrap items-center gap-2 rounded-lg border bg-white px-3 py-2">
+                  <span className="text-ink w-24 shrink-0 text-sm font-semibold">{fullDateTime(new Date(c.start).toISOString()).split("）")[0]}）</span>
+                  <TimeSpan
+                    start={min(c.start)}
+                    end={min(c.end)}
+                    onChange={(st, en) => update(i, { start: day + st * 60000, end: day + en * 60000 })}
+                  />
+                  <button type="button" aria-label="外す" onClick={() => setChosen(chosen.filter((_, j) => j !== i))} className="text-ink-soft ml-auto px-1 text-lg leading-none">
+                    ×
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-ink text-[13px] font-semibold">
@@ -139,11 +167,37 @@ export function PollStart({
           </select>
         </label>
         <button type="button" onClick={start} disabled={saving || chosen.length === 0} className={btn.primary}>
-          {saving ? "始めています…" : `${chosen.length}個の日程で投票を始める`}
+          {saving ? "始めています…" : `${chosen.length}個の時間帯で投票を始める`}
         </button>
       </div>
       {error && <ErrorText>{error}</ErrorText>}
     </div>
+  );
+}
+
+const JST = 9 * 60 * 60 * 1000;
+const DAY = 24 * 60 * 60 * 1000;
+
+/** 「18:00 〜 21:00」の 2 つの選択（その日の 0:00 からの分、30 分刻み・24:00 まで）。始まりを動かすと長さを保って終わりも動く */
+function TimeSpan({ start, end, onChange }: { start: number; end: number; onChange: (start: number, end: number) => void }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <select
+        aria-label="始まり"
+        value={start}
+        onChange={(e) => {
+          const next = Number(e.target.value);
+          onChange(next, Math.min(next + Math.max(end - start, 30), 24 * 60));
+        }}
+        className={`${field} w-auto`}
+      >
+        {HALF_HOURS.map((x) => <option key={x} value={x}>{hm(x)}</option>)}
+      </select>
+      <span className="text-ink-soft text-xs">〜</span>
+      <select aria-label="終わり" value={end} onChange={(e) => onChange(start, Number(e.target.value))} className={`${field} w-auto`}>
+        {[...HALF_HOURS, 24 * 60].filter((x) => x > start).map((x) => <option key={x} value={x}>{hm(x)}</option>)}
+      </select>
+    </span>
   );
 }
 
