@@ -17,6 +17,9 @@ const TABS = [
 ] as const;
 type Tab = (typeof TABS)[number]["key"];
 
+/** まだ決まっていない会議（募集中・日程の投票中）は「募集中」のタブに出す */
+const active = (m: MeetingSummary) => m.status === "open" || m.status === "voting";
+
 export default function MeetingListPage() {
   const [meetings, setMeetings] = useState<MeetingSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +36,7 @@ export default function MeetingListPage() {
   }, []);
 
   const visible = (meetings ?? [])
-    .filter((m) => (tab === "open" ? m.status === "open" : m.status !== "open"))
+    .filter((m) => (tab === "open") === active(m))
     .sort((a, b) =>
       tab === "open"
         ? a.deadline.localeCompare(b.deadline)
@@ -63,7 +66,7 @@ export default function MeetingListPage() {
           onChange={setTab}
           options={TABS.map((t) => ({
             value: t.key,
-            label: `${t.label} ${(meetings ?? []).filter((m) => (t.key === "open" ? m.status === "open" : m.status !== "open")).length}`,
+            label: `${t.label} ${(meetings ?? []).filter((m) => (t.key === "open") === active(m)).length}`,
           }))}
         />
       </div>
@@ -85,6 +88,7 @@ export default function MeetingListPage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     {m.status === "open" && <Tag tone="amber">募集中</Tag>}
+                    {m.status === "voting" && <Tag tone="amber">投票中</Tag>}
                     {m.status === "confirmed" && <Tag tone="grass">決定</Tag>}
                     {m.status === "failed" && <Tag tone="muted">不成立</Tag>}
                     {m.event_id && <Tag tone="navy">イベント</Tag>}
@@ -95,6 +99,8 @@ export default function MeetingListPage() {
                       <span className="text-ink font-semibold">{fullDateTime(m.confirmed_start)}〜</span>
                     ) : m.status === "open" ? (
                       <>{fullDateTime(m.deadline)} 結果発表</>
+                    ) : m.status === "voting" ? (
+                      <>{fullDateTime(m.deadline)} 投票締め切り</>
                     ) : (
                       "そろう時間なし"
                     )}

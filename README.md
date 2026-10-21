@@ -117,6 +117,7 @@ Secret key を `NEXT_PUBLIC_` 付きの変数に入れると、サイトを開�
 | `014_event_files.sql` | イベントの資料（013 を先に流す） | Table Editor に `event_files` があるか |
 | `015_event_scheduling.sql` | イベントの日程調整（**このコードより先に流す**。`events.date_status` を読むので、無いと一覧が開けない） | `events` に `date_status` 列があるか |
 | `016_address.sql` | イベント・会議の「住所」（**このコードより先に流す**。`events.address` を読むので、無いと一覧が開けない） | `events` に `address` 列があるか |
+| `017_event_polls.sql` | イベントの日程調整の 2 回目（投票）。`meetings.status` に `voting`、投票の 2 表（**このコードより先に流す**） | Table Editor に `meeting_poll_options` があるか |
 
 どれも何度流しても安全に作ってあるので、迷ったら全部流してよい。
 
@@ -285,6 +286,21 @@ tests/                        npm test（node --test）
 - 日程調整中に編集画面で日時は変えられない（決まったら入る）。イベント名を変えても会議の名前は変わらない
 - イベントを消すと会議も消える（`meetings.event_id` が `on delete cascade`）
 
+### 2 回目：候補から選んで投票（2026-10-21〜）
+
+1 回目（みんなの予定）の募集中に、主催者（日程調整の主催者か `ORGANIZERS`）はイベントのページの
+「候補から日程を選んで投票にする」で、**今の時点の候補**から日程を選ぶか日時を足し（10 個まで）、締め切りを決めて投票にできる。
+
+- 会議は `status='voting'`（投票中）になり、`deadline` は投票の締め切りに置き直す（イベントは日程調整中のまま、
+  `schedule_deadline` が締め切りになる）。選択肢は `meeting_poll_options`、印は `meeting_poll_votes`
+- 投票はイベントのページで、会議の参加者（1 回目で予定を見た人）が「参加できる」日程すべてに印を付ける（締め切りまで変えられる）。
+  誰が付けたかは名前で見える
+- 締め切りを過ぎたら、一番多く印が付いた日程（同数なら早いほう）に決める（`lib/server/poll.ts` の `decidePoll`。
+  `settle` から呼ぶので、定時ジョブ・ページを開いたときのどちらでも決まる）。誰も付けていなければ不成立。
+  主催者は締め切り前でも「この日程に決める」で決められる
+- 決まったら**印を付けた人が参加**になり（`syncEvent`）、Discord に流す。投票開始も `@everyone` で流す（リンクはイベントのページ）
+- 会議ページでは「投票中」と、イベントのページへの導線だけを出す。「募集をやり直す」で投票をやめて募集中に戻せる（選択肢と印は消える）
+
 ## 日程調整（カレンダー連携）
 
 会議を作ると「募集中」になり、結果発表の時刻に参加者のカレンダーから日時が自動で決まる。
@@ -363,7 +379,7 @@ secret key で接続したときだけ触れる。
 
 ### 有効にする手順（初回だけ）
 
-1. Supabase の SQL Editor で `supabase/migrations/` の 004〜016 を番号順に実行
+1. Supabase の SQL Editor で `supabase/migrations/` の 004〜017 を番号順に実行
 2. Google Cloud Console でプロジェクトを作り、Google Calendar API を有効にする
 3. OAuth 同意画面：User Type は「外部」、scope は `calendar.freebusy` と
    `calendar.calendarlist.readonly`（どちらも非機密なので審査は不要）。

@@ -58,6 +58,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   // 決まっていた日時へのあとからの参加登録は、もう意味がないので消す
   if (previous.status !== "open") await admin.from("meeting_rsvps").delete().eq("meeting_id", id);
+  // 日程の投票（2 回目）をしていたら、その選択肢と印も消す（候補から出し直すので）
+  if (previous.status === "voting") await admin.from("meeting_poll_options").delete().eq("meeting_id", id);
 
   await syncEvent(admin, data as Meeting);
   await notifyExtended(data as Meeting, previous, req.nextUrl.origin);

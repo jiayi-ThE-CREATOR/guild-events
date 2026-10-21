@@ -2,9 +2,11 @@ import type { NextRequest } from "next/server";
 import { meetingRanges } from "@/lib/ranges";
 import { getAdmin, NOT_CONFIGURED } from "@/lib/server/admin";
 import { enteredCounts, settle, type Meeting } from "@/lib/server/meetings";
+import { pollOf } from "@/lib/server/poll";
 
 /**
  * イベントの日程調整（つないでいる会議）の要約。日程調整を使っていないイベントは { meeting: null }。
+ * 投票中なら、投票の選択肢と印も返す（poll）。
  * 結果発表を過ぎていれば、ここで決める（会議ページと同じく、定時ジョブより先に開かれた場合）
  */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -34,12 +36,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       id: m.id,
       status: m.status,
       organizer: m.organizer,
-      participants: m.participants.length,
+      participants: m.participants,
       duration_min: m.duration_min,
       ranges: meetingRanges(m),
       deadline: m.deadline,
       entered: entered ?? null,
     },
+    // 投票中（2 回目）は選択肢と、それぞれに「参加できる」を付けた人
+    poll: m.status === "voting" ? await pollOf(admin, m.id) : null,
     // ここで決まったときは、画面がイベントを読み直す
     settled: before !== m.status,
   });

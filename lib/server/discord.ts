@@ -4,6 +4,7 @@ import { meetingRanges, rangeLabel } from "../ranges.ts";
 import { labelOf } from "../guests.ts";
 import type { Meeting } from "./meetings";
 import type { EventRecord } from "../types";
+import type { PollOption } from "../poll";
 
 /**
  * 会議の募集開始と決定を Discord のチャンネルに流す（Webhook）。
@@ -258,4 +259,53 @@ export async function notifyEventRsvp(
   origin: string,
 ) {
   await post(eventRsvpMessage(e, member, attending, count, `${origin}/events/${e.id}`));
+}
+
+/* ───────── 日程の投票（イベントの日程調整の 2 回目） ───────── */
+
+/** 「11/10（火）18:00〜20:00」 */
+function span(o: { start: string; end: string }): string {
+  return `${fullDateTime(o.start)}〜${timeOnly(o.end)}`;
+}
+
+/** 投票を始めたとき（先頭で @everyone）。投票はイベントのページで行う */
+export function pollOpenedMessage(m: Meeting, options: { start: string; end: string }[], url: string): string {
+  return [
+    `@everyone 🗳 **${m.title}** の日程を投票で決めます`,
+    "候補：",
+    ...options.map((o) => `・${span(o)}`),
+    `⏰ 締め切り：${fullDateTime(m.deadline)}（一番多く「参加できる」が付いた日程に決まります）`,
+    `👥 投票する人（${m.participants.length}人）：${m.participants.join("、")}`,
+    `🔗 ${url}`,
+  ].join("\n");
+}
+
+/** 投票で決まったとき（または誰も印を付けず不成立のとき） */
+export function pollDecidedMessage(m: Meeting, chosen: PollOption | null, url: string): string {
+  if (!chosen) {
+    return [`⚠️ **${m.title}** の日程の投票は、どの日程にも印が付かず決まりませんでした`, `🔗 ${url}`].join("\n");
+  }
+  return [
+    `📅 **${m.title}** の日程が投票で決まりました`,
+    `🗓 ${span(chosen)}`,
+    m.location ? `📍 ${m.location}` : null,
+    m.address ? addressLine(m.address) : null,
+    `✅ 参加（${chosen.voters.length}人）：${chosen.voters.join("、") || "なし"}`,
+    `🔗 ${url}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** 投票はイベントのページで行うので、リンクはイベントへ（イベントにつながっていない会議なら会議へ） */
+function pollUrl(m: Meeting, origin: string): string {
+  return m.event_id ? `${origin}/events/${m.event_id}` : `${origin}/schedule/${m.id}`;
+}
+
+export async function notifyPollOpened(m: Meeting, options: { start: string; end: string }[], origin: string) {
+  await post(pollOpenedMessage(m, options, pollUrl(m, origin)), true);
+}
+
+export async function notifyPollDecided(m: Meeting, chosen: PollOption | null, origin: string) {
+  await post(pollDecidedMessage(m, chosen, pollUrl(m, origin)));
 }

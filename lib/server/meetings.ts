@@ -7,6 +7,7 @@ import { freeMembers } from "../slots";
 import { availability } from "./availability";
 import { notifyDiscord } from "./discord";
 import { syncEvent } from "./event-sync";
+import { decidePoll, settleDuePolls } from "./poll";
 import { meetingMembers } from "./guests";
 
 export type Meeting = {
@@ -26,7 +27,8 @@ export type Meeting = {
   /** 候補（複数可）。null は 009 より前に作った会議で、古い列の 1 件として扱う */
   ranges: CandidateRange[] | null;
   deadline: string;
-  status: "open" | "confirmed" | "failed";
+  /** voting＝日程の投票中（017。イベントの日程調整の 2 回目。deadline は投票の締め切り） */
+  status: "open" | "voting" | "confirmed" | "failed";
   confirmed_start: string | null;
   confirmed_available: number | null;
   confirmed_total: number | null;
@@ -78,6 +80,10 @@ export async function settle(
   meeting: Meeting,
   origin: string,
 ): Promise<Meeting> {
+  // 投票中は、締め切りを過ぎていれば一番多く印が付いた日程に決める（poll.ts）
+  if (meeting.status === "voting") {
+    return Date.parse(meeting.deadline) <= Date.now() ? decidePoll(admin, meeting, origin) : meeting;
+  }
   if (meeting.status !== "open" || Date.parse(meeting.deadline) > Date.now()) return meeting;
 
   const declined = await declinesOf(admin, meeting.id);
@@ -141,7 +147,7 @@ export async function settleDue(admin: SupabaseClient, origin: string): Promise<
       console.error(`[meetings] ${m.id} の決定に失敗: ${(e as Error).message}`);
     }
   }
-  return data?.length ?? 0;
+  return (data?.length ?? 0) + (await settleDuePolls(admin, origin));
 }
 
 /**
