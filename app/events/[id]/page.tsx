@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { PollStart, PollVote } from "@/components/EventPoll";
+import { Candidates, type CandidateMeeting, type CandidatePreview } from "@/components/MeetingCandidates";
+import MembersBusyGrid from "@/components/MembersBusyGrid";
 import MeetingFiles, { type FileItem } from "@/components/MeetingFiles";
 import PageHeader from "@/components/PageHeader";
 import { btn, Dropdown, ErrorText, MapLink, Menu, Note, SectionTitle, Tag } from "@/components/ui";
@@ -17,6 +19,7 @@ import {
   setAttendance,
 } from "@/lib/data";
 import { campusOf, fullDateTime, remainingSeats } from "@/lib/format";
+import { labelOf } from "@/lib/guests";
 import { durationLabel } from "@/lib/meetings";
 import { isMember, isOrganizer } from "@/lib/members";
 import type { PollOption } from "@/lib/poll";
@@ -58,6 +61,12 @@ export default function EventDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [schedule, setSchedule] = useState<Schedule | null>(null);
+  // 募集中の「今の時点の候補」（リスト／表）。会議ページと同じものをここにも出す
+  const [candidates, setCandidates] = useState<{
+    meeting: CandidateMeeting;
+    preview: CandidatePreview;
+    labels: Record<string, string>;
+  } | null>(null);
 
   const fetchEvent = useCallback(
     () =>
@@ -114,6 +123,20 @@ export default function EventDetailPage() {
       alive = false;
     };
   }, [dateStatus, fetchSchedule, fetchEvent, show]);
+  // 募集中なら、会議の詳細（みんなのカレンダーから出した候補）を読む
+  const openMeetingId = schedule?.status === "open" ? schedule.id : null;
+  useEffect(() => {
+    if (!openMeetingId) return;
+    let alive = true;
+    fetch(`/api/meetings/${openMeetingId}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => alive && json && setCandidates({ meeting: json.meeting, preview: json.preview, labels: json.labels ?? {} }))
+      .catch(() => alive && setCandidates(null));
+    return () => {
+      alive = false;
+    };
+  }, [openMeetingId]);
+
   // 投票を始めた・投票した・決めたあと。決まればイベントも変わるので読み直す
   const reloadSchedule = async () => {
     setSchedule((await fetchSchedule()).schedule);
@@ -227,6 +250,26 @@ export default function EventDetailPage() {
             member={isClient ? (profile?.name ?? null) : null}
             onChanged={reloadSchedule}
           />
+        )}
+
+        {!fixed && schedule?.status === "open" && (
+          <div className="mt-4">
+            {candidates ? (
+              <Candidates
+                meeting={candidates.meeting}
+                preview={candidates.preview}
+                label={(k) => labelOf(candidates.labels, k)}
+              />
+            ) : (
+              <Note>みんなのカレンダーを確認中…</Note>
+            )}
+          </div>
+        )}
+        {!fixed && schedule?.status === "voting" && (
+          <section className="mt-4">
+            <SectionTitle title="みんなの予定" meta="30 分ごとに誰が予定ありか" />
+            <MembersBusyGrid meetingId={schedule.id} ranges={schedule.ranges} />
+          </section>
         )}
 
         {isClient && fixed && (
